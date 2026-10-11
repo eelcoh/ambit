@@ -46,7 +46,7 @@ jobs:
           name=rust-std-$version-x86_64-unknown-hermit
           gh release download "$version" --repo hermit-os/rust-std-hermit --pattern "$name.tar.gz"
           tar xf "$name.tar.gz"
-          "./$name/install.sh" --prefix="$(rustc --print sysroot)" --disable-ldconfig
+          "./$name/install.sh"  # installs into the rust-toolchain.toml toolchain's sysroot
           rm -rf "$name" "$name.tar.gz"
       - uses: Swatinem/rust-cache@v2
       - run: scripts/acceptance.sh native
