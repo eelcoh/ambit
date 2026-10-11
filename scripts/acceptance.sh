@@ -19,7 +19,8 @@ case $backend in
   *) echo "unknown backend: $backend"; exit 2 ;;
 esac
 pid=$!
-trap 'kill $pid 2>/dev/null; pkill -P $pid 2>/dev/null; rm -f "$log"' EXIT
+# Cleanup must not change the exit status (set -e also applies inside the trap).
+trap 'kill $pid 2>/dev/null || true; pkill -P $pid 2>/dev/null || true; rm -f "$log"' EXIT
 
 for _ in $(seq 100); do curl -s -o /dev/null -m 0.2 $base/ && break; sleep 0.1; done
 

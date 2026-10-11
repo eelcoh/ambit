@@ -1,0 +1,131 @@
+# Level 2 enforcement (DESIGN.md): which crate may use which API, checked by cackle (`cargo acl`)
+# on the compiled code of every crate, dependencies included. Human-owned.
+#
+# - `app` has no [pkg.app] entry on purpose: it may use no restricted API and no unsafe code.
+#   Its effects go through the capabilities handed to init().
+# - Build scripts and tests run in a Bubblewrap sandbox (no network, writes only to a temp dir).
+# - Analysed for the host target. The hermit image is covered by the same app/platform crates,
+#   but the kernel itself (the `hermit` crate) is not analysed here.
+
+[common]
+version = 2
+import_std = ["fs", "net", "process", "env", "terminate"]
+
+[sandbox]
+kind = "Bubblewrap"
+
+[pkg.tracing-attributes]
+allow_proc_macro = true
+
+[pkg.unicode-ident]
+allow_unsafe = true
+
+[pkg.itoa]
+allow_unsafe = true
+
+[pkg.proc-macro2]
+build.allow_apis = [
+    "env",
+    "fs",
+    "process",
+    "terminate",
+]
+allow_unsafe = true
+
+[pkg.once_cell]
+allow_unsafe = true
+
+[pkg.quote]
+build.allow_apis = [
+    "env",
+    "process",
+]
+
+[pkg.pin-project-lite]
+allow_unsafe = true
+
+[pkg.bytes]
+allow_unsafe = true
+allow_apis = [
+    "terminate",
+]
+
+[pkg.libc]
+build.allow_apis = [
+    "env",
+    "process",
+]
+allow_unsafe = true
+
+[pkg.tracing-core]
+allow_unsafe = true
+
+[pkg.httparse]
+build.allow_apis = [
+    "env",
+    "process",
+]
+allow_unsafe = true
+
+[pkg.lazy_static]
+allow_unsafe = true
+
+[pkg.http]
+allow_unsafe = true
+
+[pkg.getrandom]
+build.allow_apis = [
+    "env",
+    "process",
+]
+allow_unsafe = true
+
+[pkg.log]
+allow_unsafe = true
+
+[pkg.tracing-log]
+allow_unsafe = true
+
+[pkg.thread_local]
+allow_unsafe = true
+
+[pkg.sharded-slab]
+allow_unsafe = true
+
+[pkg.smallvec]
+allow_unsafe = true
+
+[pkg.redb]
+build.allow_apis = [
+    "env",
+]
+allow_unsafe = true
+allow_apis = [
+    "fs",
+]
+
+[pkg.tracing-subscriber]
+allow_unsafe = true
+allow_apis = [
+    "env",
+]
+
+[pkg.syn]
+allow_unsafe = true
+
+[pkg.tracing]
+allow_unsafe = true
+
+[pkg.ambit-server-std]
+allow_apis = [
+    "net",
+]
+
+[pkg.ambit-server-native]
+test.allow_apis = [
+    "env",
+    "process",
+]
+allow_apis = [
+    "fs",
+]

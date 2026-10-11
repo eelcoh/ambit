@@ -12,3 +12,5 @@ cargo clippy -p app --lib --locked -- -D warnings \
   -F clippy::print_stdout -F clippy::print_stderr
 cargo test --workspace --locked
 scripts/check-app.py
+# Level 2: per-crate API permissions (cackle.toml), dependencies included.
+cargo acl -n --fail-on-warnings
