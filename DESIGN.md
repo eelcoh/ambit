@@ -158,6 +158,48 @@ server_native::serve(app::init(NativeClock::new(), OsRandom, NativeKv::open(..)?
   `tiny_http` spawned a thread per connection without limit, which crashed the 64 MB hermit VM at
   20 concurrent requests; the replacement is a small server on `httparse` (fewer dependencies too).
 
+## TUI platform API (proposal)
+Same principles as the server: capabilities are `init`'s parameters, generics, the platform owns
+`main`, the loop and concurrency. Shaped by two real apps to migrate: `sonos-tui` (ratatui, LAN
+HTTP to speakers, SSDP discovery, Spotify OAuth) and `crossload` (ratatui + tears, book folders,
+mounted e-readers, device over TCP/websocket, sqlite).
+
+```rust
+// platforms/tui/api
+pub use ratatui_core::{buffer::Buffer, layout::Rect};   // and ratatui-widgets for apps
+pub enum Event<M> { Key(KeyEvent), Paste(String), Resize(u16, u16), Msg(M) }
+pub enum Cmd<M> { None, Quit, Batch(Vec<Cmd<M>>),
+                  After(Duration, M),                               // timer, on the platform clock
+                  Task(Box<dyn FnOnce() -> M + Send>) }             // blocking work, off the UI thread
+pub trait App: 'static {
+    type Msg: Send + 'static;
+    fn update(&mut self, event: Event<Self::Msg>) -> Cmd<Self::Msg>;
+    fn view(&self, area: Rect, buf: &mut Buffer);
+}
+
+// app
+pub fn init(clock: impl Clock, kv: impl Kv, config: Config) -> impl App
+```
+- **ratatui types are the view vocabulary**, as `http` is for the server. `view` draws into a
+  `Buffer` (ratatui's `Widget` signature). The app depends on `ratatui-core`/`ratatui-widgets`, never
+  on `crossterm`: it can't touch the terminal, raw mode or stdout.
+- **`update` mutates the model in place** and returns commands. That's the Elm shape in Rust idiom
+  (no model cloning).
+- **Blocking work is a `Task`**: a closure that captures the capabilities it needs (`Arc`) and
+  returns a message. The platform runs it on a bounded pool, so the UI never blocks on the network.
+  No `std::thread` in the app.
+- **Backends.** `native`: crossterm, raw mode and alternate screen, and the terminal is restored
+  on exit and on panic. `sim`: scripted events, tasks run inline, timers advance `SimClock`, and
+  the final `Buffer` is asserted as text. The same event script always gives the same screen, so
+  UI tests are deterministic and need no terminal.
+- **Capabilities in order of need.** First increment: `Clock`, `Random`, `Kv`. For the migrations:
+  - `Http`: outbound, scoped to an origin allowlist in the wiring (`http://<speaker>:1400`,
+    `https://api.spotify.com`). Shared with the server's outbound need.
+  - `Discovery`: SSDP/mDNS; the result is addresses the `Http` scope then allows.
+  - `Dir`: a directory handle the app can't escape (cap-std style), for the book folder or a
+    mounted reader. The `powerbox` shape for a terminal: the path comes from config or arguments.
+  - `OpenUrl` and a loopback callback for OAuth logins.
+
 ## Workspace shape (sketch)
 ```
 caps/                      capability traits                          (human-owned)
@@ -282,7 +324,12 @@ debugger comfort.
    agent identity to push under, and whether to enable local write-deny rules.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
-3. `tui` platform (terminal + headless), to prove the Elm entry shape; then `cli`.
+3. `tui` platform: api, native and sim backends, an example app, spec tests. Then `Http` and
+   `Dir`, and migrate `sonos-tui` (smaller) before `crossload`. Then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.
+5. Longer horizon: **iOS and Android** as `gui`-family platforms. Capabilities map onto their
+   permission models (iOS entitlements and Info.plist usage keys, Android manifest permissions),
+   and the file picker and photo picker are real powerboxes there. Open: a Rust UI toolkit that
+   targets both, or a thin native shell around a Rust core.
