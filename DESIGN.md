@@ -172,21 +172,33 @@ One binary crate per backend rather than Cargo features: features unify badly ac
 and backends need different target-specific dependencies.
 
 ## Enforcement
-1. Lints: `app/clippy.toml` `disallowed-methods`/`disallowed-types` (std::fs, std::net,
-   std::process, std::env, SystemTime::now, ...), with
-   `#![forbid(clippy::disallowed_methods, clippy::disallowed_types, unsafe_code)]` so they can't be
-   `#[allow]`ed locally. Dependency allowlist for `app`.
-2. cackle (`cargo acl`) for per-crate API permissions, including dependencies, build scripts and
-   proc macros (which run at build time with full authority).
-3. Runtime isolation: the backend's own mechanism (see table above).
+1. **Lints** (`scripts/check.sh`): `app/clippy.toml` `disallowed-methods`/`disallowed-types`
+   (std::fs, std::net, std::process, std::env, SystemTime::now, thread::spawn, ...). The forbids
+   are passed **on the clippy command line** (`-F`), not only via `#![forbid]` in `app/src/lib.rs`:
+   that file is agent-owned, and deleting the attribute plus an `#[allow]` silenced clippy
+   completely. A command-line forbid can't be relaxed from source (E0453).
+   **App checks** (`scripts/check-app.py`, via `cargo metadata`): `app` has no build script and
+   no proc-macro target; every crate reachable over normal and build edges is in
+   `app/allowed-deps.txt` (stale entries fail too); every dependency comes from crates.io or the
+   workspace, so an allowlisted name from git or a path is rejected; `Cargo.lock` must match.
+2. **cackle** (`cargo acl`, `cackle.toml`): per-crate API permissions on compiled code, for every
+   crate including dependencies. `app` has no entry: no restricted API, no unsafe. Build scripts
+   and tests run in Bubblewrap. Catches what level 1 can't see: a dependency's use of
+   `std::net`, or code that slips past the lints.
+3. **Runtime isolation**: the backend's own mechanism (see table above).
 
 Levels 1 and 2 apply on **every** backend, native included, so dev can't quietly use what prod
 doesn't allow.
 
-**Human review surface** = `caps/`, platform APIs, conformance tests, `spec/`, the `run-*` wiring,
-and the enforcement configs. Protection:
-- Enforce outside the agent: read-only mounts or sandbox write-deny rules for those paths, plus a
-  CI check that fails on changes to them without human sign-off.
+**Human review surface** = everything except `app/` (which keeps `clippy.toml` and
+`allowed-deps.txt` human-owned): `caps/`, platforms, conformance, `spec/`, `run-*`, `scripts/`,
+`cackle.toml`, `Cargo.toml`/`Cargo.lock`, `rust-toolchain.toml`, `.github/`. Listed in
+`.github/CODEOWNERS`. Protection:
+- **Merge gate**: CODEOWNERS + branch protection ("require review from Code Owners"), plus CI.
+  Only works if the agent pushes under **its own identity** (a bot account or GitHub App): the
+  owner can't approve their own PR, and an agent using the owner's credentials *is* the owner.
+- **Locally**: read-only mounts or sandbox write-deny rules for those paths. Not enabled in this
+  repo, because here the platform itself is being built.
 - A Claude Code `PreToolUse` hook only as fast feedback; it doesn't cover `sed -i`, `git checkout`,
   scripts, etc.
 
@@ -241,6 +253,12 @@ debugger comfort.
     `syn`, ...), because they run at build time with full authority. Stale entries also fail.
   - Native: redb for `Kv`, `getrandom`. Handler panics become 500.
   - Clippy only runs in `cargo clippy`, not `cargo build`: CI must run `scripts/check.sh`.
+- **Enforcement levels 1 and 2 in CI** (`.github/workflows/ci.yml`): `check.sh` (fmt, clippy,
+  app lints with command-line forbids, tests, `check-app.py`, cackle), and acceptance on native
+  and hermit (KVM on GitHub runners, Hermit std from hermit-os/rust-std-hermit). Verified bypass
+  attempts, all rejected: `#![forbid]` removed + `#[allow]`; `app/build.rs`; allowlisted name
+  from a path; `TcpStream::connect` in `app` (cackle: "uses disallowed API `net`").
+- sim `MemKv` fault injection (`Faults::All`, `Faults::Writes`), with spec tests.
 - **hermit backend: works.** `platforms/server/hermit`, `run-hermit`. `platforms/server/std` holds
   what native and hermit share: the bounded HTTP server and `StdClock`.
   - Kernel features derived as designed: `tcp` from the backend crate, `acpi`/`pci`/`dhcpv4`/
@@ -260,10 +278,11 @@ debugger comfort.
 - QEMU runs on the host; `/dev/kvm` is available.
 
 ## Next steps
-1. Rest of the template: cackle (level 2), protection of the human-owned paths (sandbox/CI), CI
-   running `check.sh` + acceptance on both backends, sim failure injection (`Kv` errors).
-2. Report the silent entropy fallback upstream (hermit-os/kernel): returning success with
-   LCG output is a security bug for any Hermit user.
+1. Protection, the remaining decisions: branch protection on `main` with code-owner review, an
+   agent identity to push under, and whether to enable local write-deny rules.
+2. Upstream: hermit-os/kernel#2736 already reports the silent entropy fallback (aarch64).
+   Comment with the x86_64 case: every documented QEMU CPU model lacks `rdseed`, and
+   `is_x86_feature_detected!` can't detect it. Draft ready.
 3. `tui` platform (terminal + headless), to prove the Elm entry shape; then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
