@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 ambit-server-hermit.workspace = true
-app.workspace = true
+shortener.workspace = true
 
 # Deployment profile: qemu (virtio-net over PCI, ACPI, DHCP). Capability crates add the rest.
 [target.'cfg(target_os = "hermit")'.dependencies]

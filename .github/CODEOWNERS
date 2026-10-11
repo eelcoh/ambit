@@ -1,11 +1,11 @@
 # The human review surface (DESIGN.md, "Enforcement"). Last match wins.
 # Everything is human-owned unless listed as agent-owned below.
-*                       @eelcoh
+*                           @eelcoh
 
-# Agent-owned: the app's code and manifest. New dependencies still need a human: they change
-# Cargo.lock and app/allowed-deps.txt, which stay human-owned.
-/app/
+# Agent-owned: the apps' code and manifests. New dependencies still need a human: they change
+# Cargo.lock and the app's allowed-deps.txt, which stay human-owned.
+/apps/
 
-# ...except the app's enforcement files.
-/app/clippy.toml        @eelcoh
-/app/allowed-deps.txt   @eelcoh
+# ...except the apps' enforcement files.
+/apps/clippy.toml           @eelcoh
+/apps/*/allowed-deps.txt    @eelcoh

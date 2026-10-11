@@ -1,6 +1,6 @@
-# Human-owned. Every crate in app's normal (non-dev) dependency tree: what ends up in the
+# Human-owned. Every crate in the app's normal (non-dev) dependency tree: what ends up in the
 # artifact, plus proc macros, which run at build time with full authority.
-# Checked by scripts/check-app-deps.sh.
+# Checked by scripts/check-app.py.
 ambit-caps
 ambit-server
 bytes

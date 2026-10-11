@@ -1,0 +1,9 @@
+[package]
+name = "ambit-caps-std"
+description = "Capabilities that need only Rust std: the std clock. Used by native and hermit. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps.workspace = true

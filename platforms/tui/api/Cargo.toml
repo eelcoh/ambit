@@ -1,0 +1,9 @@
+[package]
+name = "ambit-tui"
+description = "The tui platform's contract: the App trait, events, commands, ratatui view types. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ratatui-core.workspace = true

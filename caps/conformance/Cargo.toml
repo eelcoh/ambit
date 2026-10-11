@@ -1,6 +1,6 @@
 [package]
-name = "ambit-server-conformance"
-description = "Behaviour every server backend's capabilities must have. Human-owned."
+name = "ambit-caps-conformance"
+description = "Behaviour every implementation of the capability traits must have. Human-owned."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

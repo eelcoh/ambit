@@ -17,7 +17,7 @@ tracing-subscriber.workspace = true
 hermit = { workspace = true, features = ["tcp"] }
 
 [dev-dependencies]
-ambit-server-conformance.workspace = true
+ambit-caps-conformance.workspace = true
 
 # Deployment profile for the in-image conformance run: qemu.
 [target.'cfg(target_os = "hermit")'.dev-dependencies]

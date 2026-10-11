@@ -9,11 +9,11 @@ const TTL: Duration = Duration::from_secs(3600);
 fn setup(seed: u64) -> (impl Handler, SimClock, MemKv) {
     let clock = SimClock::at(UNIX_EPOCH + Duration::from_secs(1_700_000_000));
     let kv = MemKv::new();
-    let config = app::Config {
+    let config = shortener::Config {
         base_url: "https://s.test".into(),
         ttl: TTL,
     };
-    let app = app::init(clock.clone(), SeededRandom::new(seed), kv.clone(), config);
+    let app = shortener::init(clock.clone(), SeededRandom::new(seed), kv.clone(), config);
     (app, clock, kv)
 }
 

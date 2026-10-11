@@ -96,7 +96,7 @@ says. Two kinds of kernel configuration:
   server capability: `tcp`, network driver; a storage capability: `fs`/`virtio-fs`). Cargo unifies
   features over the dependency graph, and hermit's `build.rs` forwards exactly those to the kernel
   build, so the kernel gets the union for the capabilities actually wired in `run-hermit`. The
-  dependency allowlist keeps `hermit` out of `app`, so the app can't add features.
+  dependency allowlist keeps `hermit` out of the apps, so an app can't add features.
 - **Deployment-driven: a user choice, from a fixed set of profiles.** Depends on where the image
   runs, not on what the app does: `qemu` (PCI + ACPI, virtio-net over PCI), `firecracker`
   (virtio-mmio, no PCI/ACPI), `uhyve` (no device emulation). Plus DHCP vs static IP, SMP, memory.
@@ -158,7 +158,7 @@ server_native::serve(app::init(NativeClock::new(), OsRandom, NativeKv::open(..)?
   `tiny_http` spawned a thread per connection without limit, which crashed the 64 MB hermit VM at
   20 concurrent requests; the replacement is a small server on `httparse` (fewer dependencies too).
 
-## TUI platform API (proposal)
+## TUI platform API
 Same principles as the server: capabilities are `init`'s parameters, generics, the platform owns
 `main`, the loop and concurrency. Shaped by two real apps to migrate: `sonos-tui` (ratatui, LAN
 HTTP to speakers, SSDP discovery, Spotify OAuth) and `crossload` (ratatui + tears, book folders,
@@ -177,8 +177,8 @@ pub trait App: 'static {
     fn view(&self, area: Rect, buf: &mut Buffer);
 }
 
-// app
-pub fn init(clock: impl Clock, kv: impl Kv, config: Config) -> impl App
+// apps/todo: the example
+pub fn init(clock: impl Clock, kv: impl Kv) -> impl App
 ```
 - **ratatui types are the view vocabulary**, as `http` is for the server. `view` draws into a
   `Buffer` (ratatui's `Widget` signature). The app depends on `ratatui-core`/`ratatui-widgets`, never
@@ -192,6 +192,17 @@ pub fn init(clock: impl Clock, kv: impl Kv, config: Config) -> impl App
   on exit and on panic. `sim`: scripted events, tasks run inline, timers advance `SimClock`, and
   the final `Buffer` is asserted as text. The same event script always gives the same screen, so
   UI tests are deterministic and need no terminal.
+- **`start`** returns the first commands (the todo app loads its list as a task), so the first
+  frame can say "loading…" instead of blocking.
+- **Logging** goes to a file the wiring picks: stderr would draw over the screen.
+- **Ordering is part of the contract**, tested in `platforms/tui/sim/tests`: timers fire in
+  deadline order (ties in the order they were set), each at its own time on the clock; a timer
+  set from a timer counts from when that one fired; tasks run in the order asked; nothing runs
+  after `Quit`. On native, tasks run concurrently on 4 workers, so results can arrive in any
+  order: an app that cares keys its messages.
+- **Weight**: ratatui brings 40 crates into an app's tree (25 at run time, 15 build-time proc
+  macros), against 14 for the server example. Acceptable for native-only terminal apps; the
+  allowlist makes every one a reviewed choice.
 - **Capabilities in order of need.** First increment: `Clock`, `Random`, `Kv`. For the migrations:
   - `Http`: outbound, scoped to an origin allowlist in the wiring (`http://<speaker>:1400`,
     `https://api.spotify.com`). Shared with the server's outbound need.
@@ -202,29 +213,36 @@ pub fn init(clock: impl Clock, kv: impl Kv, config: Config) -> impl App
 
 ## Workspace shape (sketch)
 ```
-caps/                      capability traits                          (human-owned)
-platforms/<p>/api/         entry shape + capability set: the contract  (human-owned)
-platforms/<p>/<backend>/   implementations; the only crates doing IO   (human-owned)
-platforms/<p>/conformance/ tests every backend must pass               (human-owned)
-app/                       all logic, no ambient authority             (agent-owned)
-spec/                      properties and acceptance tests on the app  (human-owned)
-run-<backend>/             tiny binary crates: wiring only             (human-owned)
+caps/api/                  capability traits                           (human-owned)
+caps/{std,native,sim}/     implementations, shared by all platforms    (human-owned)
+caps/conformance/          tests every implementation must pass        (human-owned)
+platforms/<p>/api/         entry shape: the contract                   (human-owned)
+platforms/<p>/<backend>/   event loop, IO; re-exports the caps it runs (human-owned)
+apps/<name>/               all logic, no ambient authority             (agent-owned)
+apps/clippy.toml           disallowed APIs, for every app              (human-owned)
+spec/                      properties and acceptance tests on the apps (human-owned)
+run-<name>/                tiny binary crates: wiring only             (human-owned)
 ```
+Capability implementations live apart from platforms: `NativeKv` is the same store for a server
+and a terminal app.
 One binary crate per backend rather than Cargo features: features unify badly across a workspace,
 and backends need different target-specific dependencies.
 
 ## Enforcement
-1. **Lints** (`scripts/check.sh`): `app/clippy.toml` `disallowed-methods`/`disallowed-types`
-   (std::fs, std::net, std::process, std::env, SystemTime::now, thread::spawn, ...). The forbids
-   are passed **on the clippy command line** (`-F`), not only via `#![forbid]` in `app/src/lib.rs`:
-   that file is agent-owned, and deleting the attribute plus an `#[allow]` silenced clippy
+Applies to every crate under `apps/`.
+1. **Lints** (`scripts/check.sh`): `apps/clippy.toml` `disallowed-methods`/`disallowed-types`
+   (std::fs, std::net, std::process, std::env, SystemTime::now, thread::spawn, ...), found by
+   clippy for every app. The forbids are passed **on the clippy command line** (`-F`), not only
+   via `#![forbid]` in the app's `src/lib.rs`: that file is agent-owned, and deleting the attribute plus an `#[allow]` silenced clippy
    completely. A command-line forbid can't be relaxed from source (E0453).
-   **App checks** (`scripts/check-app.py`, via `cargo metadata`): `app` has no build script and
-   no proc-macro target; every crate reachable over normal and build edges is in
-   `app/allowed-deps.txt` (stale entries fail too); every dependency comes from crates.io or the
+   **App checks** (`scripts/check-app.py`, via `cargo metadata`): an app has no build script and
+   no proc-macro target; every crate reachable over normal and build edges is in its
+   `allowed-deps.txt` (stale entries fail too); a directory under `apps/` that isn't a workspace
+   member fails, so an app can't escape the checks; every dependency comes from crates.io or the
    workspace, so an allowlisted name from git or a path is rejected; `Cargo.lock` must match.
 2. **cackle** (`cargo acl`, `cackle.toml`): per-crate API permissions on compiled code, for every
-   crate including dependencies. `app` has no entry: no restricted API, no unsafe. Build scripts
+   crate including dependencies. The apps have no entry: no restricted API, no unsafe. It sees
+   code that ends up in a binary; unreachable code doesn't, and the lints catch that anyway. Build scripts
    and tests run in Bubblewrap. Catches what level 1 can't see: a dependency's use of
    `std::net`, or code that slips past the lints.
 3. **Runtime isolation**: the backend's own mechanism (see table above).
@@ -232,8 +250,8 @@ and backends need different target-specific dependencies.
 Levels 1 and 2 apply on **every** backend, native included, so dev can't quietly use what prod
 doesn't allow.
 
-**Human review surface** = everything except `app/` (which keeps `clippy.toml` and
-`allowed-deps.txt` human-owned): `caps/`, platforms, conformance, `spec/`, `run-*`, `scripts/`,
+**Human review surface** = everything except `apps/` (where `clippy.toml` and each
+`allowed-deps.txt` stay human-owned): `caps/`, platforms, conformance, `spec/`, `run-*`, `scripts/`,
 `cackle.toml`, `Cargo.toml`/`Cargo.lock`, `rust-toolchain.toml`, `.github/`. Listed in
 `.github/CODEOWNERS`. Protection:
 - **Merge gate**: CODEOWNERS + branch protection ("require review from Code Owners"), plus CI.
@@ -286,20 +304,25 @@ debugger comfort.
   With minimal kernel features: ~0.26 s to first response, 0.56 MB gzipped image, 48 MB RAM.
   See its `NOTES.md` and `run.sh`.
 - **Template workspace, `server` platform, native + sim: works.** `caps/`, `platforms/server/{api,
-  native,sim,conformance}`, example `app/` (a link shortener using `Clock`, `Random`, `Kv`),
+  native,sim}`, example `apps/shortener` (a link shortener using `Clock`, `Random`, `Kv`),
   `spec/`, `run-native/`. `scripts/check.sh` runs fmt, clippy, tests and the dependency check.
   - Level 1 verified: SystemTime::now, std::fs, File, TcpStream, Command, std::env, thread::spawn
-    and println! in `app` all fail clippy; `#[allow(clippy::disallowed_methods)]` is a hard error
+    and println! in an app all fail clippy; `#[allow(clippy::disallowed_methods)]` is a hard error
     (E0453, conflicts with `forbid`).
-  - `app/allowed-deps.txt` covers the full normal tree including proc macros (`tracing-attributes`,
+  - `apps/shortener/allowed-deps.txt` covers the full normal tree including proc macros (`tracing-attributes`,
     `syn`, ...), because they run at build time with full authority. Stale entries also fail.
   - Native: redb for `Kv`, `getrandom`. Handler panics become 500.
   - Clippy only runs in `cargo clippy`, not `cargo build`: CI must run `scripts/check.sh`.
 - **Enforcement levels 1 and 2 in CI** (`.github/workflows/ci.yml`): `check.sh` (fmt, clippy,
   app lints with command-line forbids, tests, `check-app.py`, cackle), and acceptance on native
   and hermit (KVM on GitHub runners, Hermit std from hermit-os/rust-std-hermit). Verified bypass
-  attempts, all rejected: `#![forbid]` removed + `#[allow]`; `app/build.rs`; allowlisted name
-  from a path; `TcpStream::connect` in `app` (cackle: "uses disallowed API `net`").
+  attempts, all rejected: `#![forbid]` removed + `#[allow]`; a `build.rs`; allowlisted name
+  from a path; `TcpStream::connect` in an app (cackle: "uses disallowed API `net`").
+- **`tui` platform, native + sim: works.** `platforms/tui/{api,native,sim}`, example `apps/todo`
+  (`Clock`, `Kv`; storage as tasks, a status timer), `run-todo`, 12 spec tests on screens as
+  text, 4 sim ordering tests. Native checked in a pseudo-terminal: items persist across runs, and
+  raw mode, alternate screen, bracketed paste and the cursor are restored on quit. The same
+  bypass checks hold for `todo` (E0453; cackle "uses disallowed API `net`").
 - sim `MemKv` fault injection (`Faults::All`, `Faults::Writes`), with spec tests.
 - **hermit backend: works.** `platforms/server/hermit`, `run-hermit`. `platforms/server/std` holds
   what native and hermit share: the bounded HTTP server and `StdClock`.
@@ -324,8 +347,8 @@ debugger comfort.
    agent identity to push under, and whether to enable local write-deny rules.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
-3. `tui` platform: api, native and sim backends, an example app, spec tests. Then `Http` and
-   `Dir`, and migrate `sonos-tui` (smaller) before `crossload`. Then `cli`.
+3. `tui`: the `Http` capability (outbound, origin allowlist) and `Discovery`, then migrate
+   `sonos-tui`; then `Dir` and `crossload`. Then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.

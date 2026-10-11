@@ -1,0 +1,45 @@
+# Human-owned. Every crate in the app's normal (non-dev) dependency tree: what ends up in the
+# artifact, plus proc macros, which run at build time with full authority.
+# Checked by scripts/check-app.py.
+allocator-api2
+ambit-caps
+ambit-tui
+bitflags
+castaway
+cfg-if
+compact_str
+either
+equivalent
+foldhash
+hashbrown
+itertools
+itoa
+kasuari
+line-clipping
+lru
+ratatui-core
+ratatui-widgets
+ryu
+static_assertions
+strum
+thiserror
+unicode-segmentation
+unicode-truncate
+unicode-width
+
+# Build time: proc macros of ratatui's dependencies (strum, darling, thiserror, instability...).
+darling
+darling_core
+darling_macro
+heck
+ident_case
+indoc
+instability
+proc-macro2
+quote
+rustversion
+strsim
+strum_macros
+syn
+thiserror-impl
+unicode-ident

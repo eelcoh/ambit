@@ -1,0 +1,15 @@
+[package]
+name = "shortener"
+description = "Example app: a link shortener. Agent-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# New dependencies must also be added to allowed-deps.txt (human-owned).
+[dependencies]
+ambit-caps.workspace = true
+ambit-server.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ambit-server-sim.workspace = true

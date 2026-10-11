@@ -1,8 +1,12 @@
 # Level 2 enforcement (DESIGN.md): which crate may use which API, checked by cackle (`cargo acl`)
 # on the compiled code of every crate, dependencies included. Human-owned.
 #
-# - `app` has no [pkg.app] entry on purpose: it may use no restricted API and no unsafe code.
-#   Its effects go through the capabilities handed to init().
+# - The apps (`shortener`, `todo`) have no [pkg.*] entry on purpose: they may use no restricted
+#   API and no unsafe code. Their effects go through the capabilities handed to init().
+# - Proc macros run inside rustc, outside the sandbox. Three need more than token in, tokens out:
+#   rustversion (asks rustc its version), document-features (reads Cargo.toml), strum_macros
+#   (env). They come in through ratatui.
+# - crossterm gets process for its `tput` fallback when the terminal size can't be read.
 # - Build scripts and tests run in a Bubblewrap sandbox (no network, writes only to a temp dir).
 # - Analysed for the host target. The hermit image is covered by the same app/platform crates,
 #   but the kernel itself (the `hermit` crate) is not analysed here.
@@ -108,6 +112,7 @@ allow_apis = [
 allow_unsafe = true
 allow_apis = [
     "env",
+    "fs",
 ]
 
 [pkg.syn]
@@ -121,11 +126,153 @@ allow_apis = [
     "net",
 ]
 
-[pkg.ambit-server-native]
+[pkg.rustversion]
+allow_proc_macro = true
+build.allow_apis = [
+    "fs",
+    "process",
+    "terminate",
+]
+allow_apis = [
+    "env",
+]
+
+[pkg.document-features]
+allow_proc_macro = true
+allow_apis = [
+    "env",
+    "fs",
+]
+
+[pkg.indoc]
+allow_proc_macro = true
+
+[pkg.instability]
+allow_proc_macro = true
+
+[pkg.darling_macro]
+allow_proc_macro = true
+
+[pkg.derive_more-impl]
+allow_proc_macro = true
+
+[pkg.thiserror-impl]
+allow_proc_macro = true
+
+[pkg.strum_macros]
+allow_proc_macro = true
+allow_apis = [
+    "env",
+]
+
+[pkg.foldhash]
+allow_unsafe = true
+
+[pkg.allocator-api2]
+allow_unsafe = true
+
+[pkg.bitflags]
+allow_unsafe = true
+
+[pkg.thiserror]
+build.allow_apis = [
+    "env",
+    "fs",
+    "process",
+    "terminate",
+]
+
+[pkg.either]
+allow_unsafe = true
+
+[pkg.castaway]
+allow_unsafe = true
+
+[pkg.hashbrown]
+allow_unsafe = true
+
+[pkg.itertools]
+allow_unsafe = true
+
+[pkg.ryu]
+allow_unsafe = true
+
+[pkg.static_assertions]
+allow_unsafe = true
+
+[pkg.compact_str]
+allow_unsafe = true
+
+[pkg.lru]
+allow_unsafe = true
+
+[pkg.errno]
+allow_unsafe = true
+
+[pkg.parking_lot_core]
+build.allow_apis = [
+    "env",
+]
+allow_unsafe = true
+
+[pkg.signal-hook-registry]
+allow_unsafe = true
+
+[pkg.scopeguard]
+allow_unsafe = true
+
+[pkg.rustix]
+build.allow_apis = [
+    "env",
+    "fs",
+    "process",
+]
+allow_unsafe = true
+
+[pkg.lock_api]
+allow_unsafe = true
+
+[pkg.signal-hook]
+allow_unsafe = true
+
+[pkg.mio]
+allow_unsafe = true
+
+[pkg.linux-raw-sys]
+allow_unsafe = true
+
+[pkg.parking_lot]
+allow_unsafe = true
+
+[pkg.ambit-caps-native]
+allow_apis = [
+    "fs",
+]
 test.allow_apis = [
     "env",
     "process",
 ]
+
+[pkg.crossterm]
+allow_unsafe = true
 allow_apis = [
+    "env",
     "fs",
+    "process",
+]
+
+[pkg.run-todo]
+allow_apis = [
+    "env",
+    "fs",
+]
+
+[pkg.signal-hook-mio]
+allow_apis = [
+    "net",
+]
+
+[api.net]
+include = [
+    "mio::net",
 ]

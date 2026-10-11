@@ -6,11 +6,6 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-ambit-caps.workspace = true
+ambit-caps-native.workspace = true
 ambit-server-std.workspace = true
-getrandom.workspace = true
-redb.workspace = true
 tracing-subscriber.workspace = true
-
-[dev-dependencies]
-ambit-server-conformance.workspace = true

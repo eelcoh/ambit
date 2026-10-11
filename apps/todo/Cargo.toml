@@ -1,6 +1,6 @@
 [package]
-name = "app"
-description = "Example app: a link shortener. Agent-owned."
+name = "todo"
+description = "Example tui app: a todo list. Agent-owned."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -8,8 +8,8 @@ publish.workspace = true
 # New dependencies must also be added to allowed-deps.txt (human-owned).
 [dependencies]
 ambit-caps.workspace = true
-ambit-server.workspace = true
-tracing.workspace = true
+ambit-tui.workspace = true
+ratatui-widgets.workspace = true
 
 [dev-dependencies]
-ambit-server-sim.workspace = true
+ambit-tui-sim.workspace = true

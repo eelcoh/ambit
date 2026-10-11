@@ -1,0 +1,13 @@
+[package]
+name = "ambit-tui-sim"
+description = "Simulation backend for the tui platform: scripted events, deterministic time, screen as text. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps-sim.workspace = true
+ambit-tui.workspace = true
+
+[dev-dependencies]
+ambit-caps.workspace = true

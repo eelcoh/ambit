@@ -4,10 +4,10 @@
 use ambit_server_hermit::{EphemeralKv, HermitRandom, StdClock};
 
 fn main() {
-    ambit_server_conformance::clock(&StdClock::new());
+    ambit_caps_conformance::clock(&StdClock::new());
     println!("conformance: clock ok");
-    ambit_server_conformance::random(&HermitRandom::new().expect("entropy"));
+    ambit_caps_conformance::random(&HermitRandom::new().expect("entropy"));
     println!("conformance: random ok");
-    ambit_server_conformance::kv(&EphemeralKv::new());
+    ambit_caps_conformance::kv(&EphemeralKv::new());
     println!("conformance: kv ok");
 }

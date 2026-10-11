@@ -1,17 +1,25 @@
 [workspace]
 resolver = "3"
 members = [
-    "caps",
+    "caps/api",
+    "caps/std",
+    "caps/native",
+    "caps/sim",
+    "caps/conformance",
     "platforms/server/api",
     "platforms/server/std",
     "platforms/server/native",
     "platforms/server/hermit",
     "platforms/server/sim",
-    "platforms/server/conformance",
-    "app",
+    "platforms/tui/api",
+    "platforms/tui/native",
+    "platforms/tui/sim",
+    "apps/shortener",
+    "apps/todo",
     "spec",
     "run-native",
     "run-hermit",
+    "run-todo",
 ]
 exclude = ["spikes"]
 
@@ -21,20 +29,30 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-ambit-caps = { path = "caps" }
+ambit-caps = { path = "caps/api" }
+ambit-caps-std = { path = "caps/std" }
+ambit-caps-native = { path = "caps/native" }
+ambit-caps-sim = { path = "caps/sim" }
+ambit-caps-conformance = { path = "caps/conformance" }
 ambit-server = { path = "platforms/server/api" }
 ambit-server-std = { path = "platforms/server/std" }
 ambit-server-native = { path = "platforms/server/native" }
 ambit-server-hermit = { path = "platforms/server/hermit" }
 ambit-server-sim = { path = "platforms/server/sim" }
-ambit-server-conformance = { path = "platforms/server/conformance" }
-app = { path = "app" }
+ambit-tui = { path = "platforms/tui/api" }
+ambit-tui-native = { path = "platforms/tui/native" }
+ambit-tui-sim = { path = "platforms/tui/sim" }
+shortener = { path = "apps/shortener" }
+todo = { path = "apps/todo" }
 
 getrandom = "0.3"
 # Kernel features are added per crate; see DESIGN.md "Hermit: minimal by default".
 hermit = { git = "https://github.com/hermit-os/hermit-rs.git", tag = "hermit-0.13.2", default-features = false }
 http = "1"
 httparse = "1"
+ratatui-core = "0.1.2"
+ratatui-crossterm = { version = "0.1.2", default-features = false, features = ["crossterm_0_29"] }
+ratatui-widgets = { version = "0.3.2", default-features = false }
 redb = "2"
 tracing = "0.1"
 tracing-subscriber = "0.3"

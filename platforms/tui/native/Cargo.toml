@@ -1,0 +1,13 @@
+[package]
+name = "ambit-tui-native"
+description = "Native terminal backend for the tui platform (crossterm). Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps-native.workspace = true
+ambit-tui.workspace = true
+ratatui-core.workspace = true
+ratatui-crossterm.workspace = true
+tracing-subscriber.workspace = true

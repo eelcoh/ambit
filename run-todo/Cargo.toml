@@ -1,0 +1,10 @@
+[package]
+name = "run-todo"
+description = "Wiring: the todo example on the native terminal backend. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-tui-native.workspace = true
+todo.workspace = true

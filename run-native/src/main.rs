@@ -7,12 +7,12 @@ use ambit_server_native::{Listen, NativeKv, OsRandom, StdClock};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     ambit_server_native::init_tracing();
 
-    let config = app::Config {
+    let config = shortener::Config {
         base_url: "http://localhost:8080".into(),
         ttl: Duration::from_secs(7 * 24 * 3600),
     };
     let kv = NativeKv::open("data/app.redb")?;
-    let app = app::init(StdClock::new(), OsRandom, kv, config);
+    let app = shortener::init(StdClock::new(), OsRandom, kv, config);
 
     ambit_server_native::serve(
         app,

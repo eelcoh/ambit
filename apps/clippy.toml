@@ -1,5 +1,6 @@
 # Human-owned. The app has no ambient authority: every effect comes through the capabilities
-# handed to init(). Enforced by the forbid() in src/lib.rs, so these can't be #[allow]ed.
+# handed to init(). Applies to every crate under apps/. Enforced by the -F flags in
+# scripts/check.sh, so an app can't #[allow] them.
 disallowed-methods = [
     { path = "std::time::SystemTime::now", reason = "use the Clock capability" },
     { path = "std::time::Instant::now", reason = "use the Clock capability" },
