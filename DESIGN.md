@@ -280,9 +280,8 @@ debugger comfort.
 ## Next steps
 1. Protection, the remaining decisions: branch protection on `main` with code-owner review, an
    agent identity to push under, and whether to enable local write-deny rules.
-2. Upstream: hermit-os/kernel#2736 already reports the silent entropy fallback (aarch64).
-   Comment with the x86_64 case: every documented QEMU CPU model lacks `rdseed`, and
-   `is_x86_feature_detected!` can't detect it. Draft ready.
+2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
+   case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
 3. `tui` platform (terminal + headless), to prove the Elm entry shape; then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
