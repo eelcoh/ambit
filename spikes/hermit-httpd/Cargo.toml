@@ -1,0 +1,14 @@
+[package]
+name = "hermit-httpd"
+edition = "2024"
+
+[dependencies]
+tiny_http = "0.12"
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+# Minimal: no default features. The defaults add dns, udp, virtio-fs, smp, fsgsbase,
+# kernel-stack and pci-ids, which this app doesn't need (image 5.4 MB -> 1.7 MB).
+hermit = { git = "https://github.com/hermit-os/hermit-rs.git", tag = "hermit-0.13.2", default-features = false, features = ["acpi", "pci", "tcp", "dhcpv4", "virtio-net"] }
+
+[profile.release]
+opt-level = "s"
