@@ -392,8 +392,10 @@ debugger comfort.
    agent identity to push under, and whether to enable local write-deny rules.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
-3. Migrate `sonos-tui` (following ADOPTING.md) (needs: `OpenUrl` + OAuth callback, a scope for music-service
-   endpoints); then `Dir` and `crossload`. Then `cli`.
+3. Migrate `sonos-tui`: under way on its `ambit` branch (following ADOPTING.md). It brought a
+   local `Dir` and kept OAuth in the wiring; the gaps it found are listed in ADOPTING.md and
+   want decisions here (initial size event, `Dir` upstream, `OpenUrl` + OAuth callback, serial
+   tasks). Then `crossload`. Then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.
