@@ -9,8 +9,8 @@ log=$(mktemp)
 
 case $backend in
   native)
-    distrobox enter build-machine -- bash -lc \
-      "export PATH=\$HOME/.cargo/bin:\$PATH; cd '$PWD' && cargo build -q -p run-native"
+    source scripts/env.sh
+    in_build_env "cargo build -q --locked -p run-native"
     ./target/debug/run-native >"$log" 2>&1 & ;;
   hermit)
     source scripts/hermit-env.sh

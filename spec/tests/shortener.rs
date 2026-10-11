@@ -2,7 +2,7 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use ambit_server::Handler;
 use ambit_server::http::{StatusCode, header};
-use ambit_server_sim::{MemKv, SeededRandom, SimClock, get, post};
+use ambit_server_sim::{Faults, MemKv, SeededRandom, SimClock, get, post};
 
 const TTL: Duration = Duration::from_secs(3600);
 
@@ -99,5 +99,41 @@ fn same_seed_same_ids() {
     assert_eq!(
         create(&a, "https://example.com"),
         create(&b, "https://example.com")
+    );
+}
+
+#[test]
+fn storage_down_is_503_and_recovers() {
+    let (app, _, kv) = setup(1);
+    let id = create(&app, "https://example.com");
+    kv.fail(Faults::All);
+    assert_eq!(
+        app.handle(post("/links", "https://example.org")).status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        app.handle(get(&format!("/{id}"))).status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    kv.fail(Faults::None);
+    assert_eq!(
+        app.handle(get(&format!("/{id}"))).status(),
+        StatusCode::FOUND
+    );
+}
+
+#[test]
+fn failed_write_creates_nothing_but_reads_still_work() {
+    let (app, _, kv) = setup(1);
+    let id = create(&app, "https://example.com");
+    kv.fail(Faults::Writes);
+    assert_eq!(
+        app.handle(post("/links", "https://example.org")).status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(kv.len(), 1);
+    assert_eq!(
+        app.handle(get(&format!("/{id}"))).status(),
+        StatusCode::FOUND
     );
 }

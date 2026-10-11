@@ -78,10 +78,22 @@ impl Random for SeededRandom {
     }
 }
 
-/// An in-memory store.
+/// Which `MemKv` operations fail, for testing how the app handles storage errors.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Faults {
+    #[default]
+    None,
+    /// Every operation fails: storage is down.
+    All,
+    /// Reads work, `put` and `delete` fail: e.g. a full disk.
+    Writes,
+}
+
+/// An in-memory store, with injectable failures.
 #[derive(Clone, Default)]
 pub struct MemKv {
     map: Arc<Mutex<BTreeMap<Vec<u8>, Vec<u8>>>>,
+    faults: Arc<Mutex<Faults>>,
 }
 
 impl MemKv {
@@ -96,21 +108,38 @@ impl MemKv {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// From now on, fail the operations `faults` selects.
+    pub fn fail(&self, faults: Faults) {
+        *lock(&self.faults) = faults;
+    }
+
+    fn check(&self, write: bool) -> Result<(), KvError> {
+        match *lock(&self.faults) {
+            Faults::All => Err(KvError::new("injected failure")),
+            Faults::Writes if write => Err(KvError::new("injected write failure")),
+            _ => Ok(()),
+        }
+    }
 }
 
 impl Kv for MemKv {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, KvError> {
+        self.check(false)?;
         Ok(lock(&self.map).get(key).cloned())
     }
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), KvError> {
+        self.check(true)?;
         lock(&self.map).insert(key.to_vec(), value.to_vec());
         Ok(())
     }
     fn delete(&self, key: &[u8]) -> Result<(), KvError> {
+        self.check(true)?;
         lock(&self.map).remove(key);
         Ok(())
     }
     fn scan(&self, prefix: &[u8]) -> Result<Vec<Entry>, KvError> {
+        self.check(false)?;
         Ok(lock(&self.map)
             .range(prefix.to_vec()..)
             .take_while(|(k, _)| k.starts_with(prefix))
