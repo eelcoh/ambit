@@ -1,0 +1,10 @@
+[package]
+name = "run-native"
+description = "Wiring: the example app on the native backend. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-server-native.workspace = true
+app.workspace = true

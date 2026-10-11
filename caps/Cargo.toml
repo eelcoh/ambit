@@ -1,0 +1,6 @@
+[package]
+name = "ambit-caps"
+description = "Capability traits shared by all platforms. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true

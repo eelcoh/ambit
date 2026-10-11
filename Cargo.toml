@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = [
+    "caps",
+    "platforms/server/api",
+    "platforms/server/native",
+    "platforms/server/sim",
+    "platforms/server/conformance",
+    "app",
+    "spec",
+    "run-native",
+]
+exclude = ["spikes"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+ambit-caps = { path = "caps" }
+ambit-server = { path = "platforms/server/api" }
+ambit-server-native = { path = "platforms/server/native" }
+ambit-server-sim = { path = "platforms/server/sim" }
+ambit-server-conformance = { path = "platforms/server/conformance" }
+app = { path = "app" }
+
+getrandom = "0.3"
+http = "1"
+redb = "2"
+tiny_http = "0.12"
+tracing = "0.1"
+tracing-subscriber = "0.3"

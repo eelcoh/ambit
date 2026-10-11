@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Everything CI runs. Must pass before merge.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+scripts/check-app-deps.sh

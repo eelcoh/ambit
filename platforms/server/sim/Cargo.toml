@@ -1,0 +1,13 @@
+[package]
+name = "ambit-server-sim"
+description = "Simulation backend: deterministic in-memory capabilities for tests. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps.workspace = true
+ambit-server.workspace = true
+
+[dev-dependencies]
+ambit-server-conformance.workspace = true

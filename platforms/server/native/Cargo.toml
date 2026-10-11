@@ -1,0 +1,18 @@
+[package]
+name = "ambit-server-native"
+description = "Native (Linux/Mac) backend for the server platform: dev, tests, debugging. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps.workspace = true
+ambit-server.workspace = true
+getrandom.workspace = true
+redb.workspace = true
+tiny_http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+ambit-server-conformance.workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "spec"
+description = "Acceptance properties of the app, run against the sim backend. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+ambit-caps.workspace = true
+ambit-server.workspace = true
+ambit-server-sim.workspace = true
+app.workspace = true

@@ -113,6 +113,42 @@ UI apps get capabilities from the user: a file picker returns a capability for t
 directory. Same model as macOS security-scoped bookmarks and the Flatpak document portal. The app
 has no `Fs`, only "files the user handed me".
 
+## Server platform API
+```rust
+// caps/: shared across platforms
+pub trait Clock: Send + Sync { fn now(&self) -> SystemTime; fn elapsed(&self) -> Duration; }
+pub trait Random: Send + Sync { fn fill(&self, buf: &mut [u8]); }
+pub trait Kv: Send + Sync { get, put, delete, scan(prefix) }
+
+// platforms/server/api
+pub type Request = http::Request<Vec<u8>>;
+pub type Response = http::Response<Vec<u8>>;
+pub trait Handler: Send + Sync + 'static { fn handle(&self, req: Request) -> Response; }
+
+// app: this signature is the app's whole capability declaration
+pub fn init(clock: impl Clock, random: impl Random, kv: impl Kv, config: Config) -> impl Handler
+
+// run-<backend>: wiring only
+server_native::serve(app::init(NativeClock::new(), OsRandom, NativeKv::open(..)?, cfg), listen)
+```
+- **Capabilities are `init`'s parameters.** One line lists everything the app can do. If the agent
+  adds a capability, the human-owned wiring stops compiling: widening authority requires a change
+  to a protected file, enforced by the type system.
+- **Generics (`impl Trait`), not `dyn`.** Zero cost; a capability a backend lacks is a compile
+  error; sim plugs in other types. Internal functions take only what they use
+  (`fn expire(clock: &impl Clock, kv: &impl Kv)`).
+- **Synchronous handler, the platform owns concurrency** (`Handler: Send + Sync`): a thread pool
+  on native, blocking on hermit. Async, if ever needed, is a different platform shape.
+- **State lives in capabilities.** `handle(&self)` is read-only; mutable state goes through `Kv`.
+- **`http` crate types**, bodies as `Vec<u8>`, no streaming for now.
+- **Config is a typed struct** passed in by the wiring; `std::env` is forbidden in the app.
+- **Logging: the `tracing` facade**, an explicit exception to "no ambient authority": write-only
+  output to an operator-controlled sink. The platform owns the subscriber; tests capture with a
+  scoped subscriber.
+- `Random` must be a CSPRNG on real backends. **Open on hermit:** the spike logs
+  `Unable to read entropy! Fallback to a naive implementation!` despite `rdrand` in the CPU model.
+- hermit has no `Kv` until the storage spike; wiring it there is a compile error until then.
+
 ## Workspace shape (sketch)
 ```
 caps/                      capability traits                          (human-owned)
@@ -188,6 +224,17 @@ debugger comfort.
 - `spikes/hermit-httpd/`: **works.** Blocking `tiny_http` server on Hermit 0.13.2 in QEMU/KVM.
   With minimal kernel features: ~0.26 s to first response, 0.56 MB gzipped image, 48 MB RAM.
   See its `NOTES.md` and `run.sh`.
+- **Template workspace, `server` platform, native + sim: works.** `caps/`, `platforms/server/{api,
+  native,sim,conformance}`, example `app/` (a link shortener using `Clock`, `Random`, `Kv`),
+  `spec/`, `run-native/`. `scripts/check.sh` runs fmt, clippy, tests and the dependency check.
+  - Level 1 verified: SystemTime::now, std::fs, File, TcpStream, Command, std::env, thread::spawn
+    and println! in `app` all fail clippy; `#[allow(clippy::disallowed_methods)]` is a hard error
+    (E0453, conflicts with `forbid`).
+  - `app/allowed-deps.txt` covers the full normal tree including proc macros (`tracing-attributes`,
+    `syn`, ...), because they run at build time with full authority. Stale entries also fail.
+  - Native: `tiny_http` + thread pool, redb for `Kv`, `getrandom`, 1 MiB body limit (413),
+    handler panics become 500.
+  - Clippy only runs in `cargo clippy`, not `cargo build`: CI must run `scripts/check.sh`.
 
 ## Environment
 - Rust builds run in the distrobox: `distrobox enter build-machine`.
@@ -196,12 +243,12 @@ debugger comfort.
 - QEMU runs on the host; `/dev/kvm` is available.
 
 ## Next steps
-1. Design the `server` platform API: entry shape, first capabilities (`Clock`, `Random`, `Log`,
-   `Kv`), how the app declares needs.
-2. Template workspace for `server` with native + sim + hermit backends, enforcement level 1+2,
-   protection, conformance tests, and a small example app. The hermit backend can stay blocking
-   (as in the spike); tokio on Hermit (Hermit's forks of `tokio`/`socket2` via
-   `[patch.crates-io]`) only if blocking turns out too limiting.
+1. hermit backend for `server` (`Clock`, `Random`, serve; blocking as in the spike) and
+   `run-hermit`, with features derived per capability crate. Fix entropy first. Tokio on Hermit
+   (Hermit's forks of `tokio`/`socket2` via `[patch.crates-io]`) only if blocking is too limiting.
+2. Rest of the template: cackle (level 2), protection of the human-owned paths (sandbox/CI),
+   black-box acceptance tests over HTTP against native and hermit, sim failure injection
+   (`Kv` errors).
 3. `tui` platform (terminal + headless), to prove the Elm entry shape.
 4. Later: `cli`; outbound connections + TLS, storage (virtio-fs/block), uhyve/Firecracker for
    hermit; attack-surface report; capabilities to Landlock/seccomp for native; `gui`.

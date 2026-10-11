@@ -1,0 +1,19 @@
+# Human-owned. Every crate in app's normal (non-dev) dependency tree: what ends up in the
+# artifact, plus proc macros, which run at build time with full authority.
+# Checked by scripts/check-app-deps.sh.
+ambit-caps
+ambit-server
+bytes
+http
+itoa
+once_cell
+pin-project-lite
+tracing
+tracing-core
+
+# Build time: tracing's #[instrument] proc macro.
+tracing-attributes
+proc-macro2
+quote
+syn
+unicode-ident

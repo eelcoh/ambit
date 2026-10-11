@@ -1,0 +1,35 @@
+# Human-owned. The app has no ambient authority: every effect comes through the capabilities
+# handed to init(). Enforced by the forbid() in src/lib.rs, so these can't be #[allow]ed.
+disallowed-methods = [
+    { path = "std::time::SystemTime::now", reason = "use the Clock capability" },
+    { path = "std::time::Instant::now", reason = "use the Clock capability" },
+    { path = "std::env::var", reason = "config comes from the wiring" },
+    { path = "std::env::var_os", reason = "config comes from the wiring" },
+    { path = "std::env::vars", reason = "config comes from the wiring" },
+    { path = "std::env::args", reason = "config comes from the wiring" },
+    { path = "std::env::set_var", reason = "no ambient state" },
+    { path = "std::env::current_dir", reason = "no filesystem access" },
+    { path = "std::fs::read", reason = "no filesystem access" },
+    { path = "std::fs::read_to_string", reason = "no filesystem access" },
+    { path = "std::fs::write", reason = "no filesystem access" },
+    { path = "std::fs::read_dir", reason = "no filesystem access" },
+    { path = "std::fs::create_dir_all", reason = "no filesystem access" },
+    { path = "std::fs::remove_file", reason = "no filesystem access" },
+    { path = "std::fs::remove_dir_all", reason = "no filesystem access" },
+    { path = "std::fs::metadata", reason = "no filesystem access" },
+    { path = "std::fs::copy", reason = "no filesystem access" },
+    { path = "std::fs::rename", reason = "no filesystem access" },
+    { path = "std::thread::spawn", reason = "the platform owns concurrency" },
+    { path = "std::process::exit", reason = "the platform owns the process" },
+    { path = "std::process::abort", reason = "the platform owns the process" },
+    { path = "std::io::stdin", reason = "no ambient IO" },
+]
+disallowed-types = [
+    { path = "std::fs::File", reason = "no filesystem access" },
+    { path = "std::fs::OpenOptions", reason = "no filesystem access" },
+    { path = "std::net::TcpStream", reason = "no network access" },
+    { path = "std::net::TcpListener", reason = "no network access" },
+    { path = "std::net::UdpSocket", reason = "no network access" },
+    { path = "std::process::Command", reason = "no subprocesses" },
+    { path = "std::thread::Builder", reason = "the platform owns concurrency" },
+]
