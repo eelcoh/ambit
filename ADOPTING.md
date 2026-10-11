@@ -27,7 +27,7 @@ ambit-tui             = { git = "https://github.com/eelcoh/ambit", rev = "<commi
 ambit-tui-native      = { git = "https://github.com/eelcoh/ambit", rev = "<commit>" }   # wiring only
 ambit-caps-net-native = { git = "https://github.com/eelcoh/ambit", rev = "<commit>" }   # wiring only
 ambit-tui-sim         = { git = "https://github.com/eelcoh/ambit", rev = "<commit>" }   # spec only
-ambit-caps-sim        = { git = "https://github.com/eelcoh/ambit", rev = "<commit>" }   # spec: SimHttp, SimDiscovery
+ambit-caps-sim        = { git = "https://github.com/eelcoh/ambit", rev = "<commit>" }   # spec: SimHttp, SimDiscovery, SimWebSocket, SimDir
 
 # Match ambit's versions and features, or the tree gets two ratatuis.
 ratatui-widgets = { version = "0.3.2", default-features = false }

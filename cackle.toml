@@ -414,6 +414,53 @@ test.allow_apis = [
     "process",
 ]
 
+# --- WebSocket (tungstenite and what it pulls in) ----------------------------------------------
+
+# Never built: zerocopy names it under cfg(any()) only to pin its version. cackle lists it from
+# the metadata anyway.
+[pkg.zerocopy-derive]
+allow_proc_macro = true
+
+# rand's ChaCha (ws frame masks) uses it through ppv-lite86. Its build script asks rustc its
+# version and reads its own Cargo.toml.
+[pkg.zerocopy]
+allow_unsafe = true
+build.allow_apis = ["env", "fs", "process"]
+
+# The WebSocket protocol. Unsafe only to skip re-checking text it has validated, and for fast
+# frame masking. It opens no connections: NativeWebSocket hands it one.
+[pkg.tungstenite]
+allow_unsafe = true
+
+# random masks for ws frames, as the protocol requires of clients.
+[pkg.rand]
+allow_unsafe = true
+
+# rand's ChaCha: SIMD.
+[pkg.ppv-lite86]
+allow_unsafe = true
+
+# ws handshake key (SHA-1, as the protocol requires) and its helpers; SIMD.
+[pkg.sha1]
+allow_unsafe = true
+
+[pkg.cpufeatures]
+allow_unsafe = true
+
+[pkg.block-buffer]
+allow_unsafe = true
+
+[pkg.generic-array]
+allow_unsafe = true
+
+# build time only: a build script asks rustc its version through it.
+[pkg.version_check]
+allow_apis = ["env", "process"]
+
+# base64 for the handshake key.
+[pkg.data-encoding]
+allow_unsafe = true
+
 [api.net]
 include = [
     "cap-primitives::net",

@@ -1,4 +1,5 @@
-//! Network capabilities: outbound HTTP within a scope, and device discovery on the local network.
+//! Network capabilities: outbound HTTP and WebSocket connections within a scope, and device
+//! discovery on the local network.
 //!
 //! The scope is set by the wiring (human-owned) and enforced by every implementation, sim
 //! included, so a test fails the same way production would. Separate from `ambit-caps` so apps
@@ -37,8 +38,10 @@ pub enum HttpErrorKind {
     Timeout,
     /// DNS, connection, TLS or protocol failure.
     Network,
-    /// The response body is larger than the configured limit.
+    /// The response body, or a WebSocket message, is larger than the configured limit.
     TooLarge,
+    /// The other side closed the WebSocket connection.
+    Closed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,13 +71,32 @@ impl std::error::Error for HttpError {}
 pub enum Scheme {
     Http,
     Https,
+    /// Plain WebSocket, for [`WebSocket`]. Encrypted WebSocket (`wss`) isn't supported yet.
+    Ws,
 }
 
 impl Scheme {
+    fn parse(scheme: Option<&str>) -> Option<Self> {
+        match scheme? {
+            "http" => Some(Scheme::Http),
+            "https" => Some(Scheme::Https),
+            "ws" => Some(Scheme::Ws),
+            _ => None,
+        }
+    }
+
     fn default_port(self) -> u16 {
         match self {
-            Scheme::Http => 80,
+            Scheme::Http | Scheme::Ws => 80,
             Scheme::Https => 443,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Scheme::Http => "http",
+            Scheme::Https => "https",
+            Scheme::Ws => "ws",
         }
     }
 }
@@ -99,15 +121,12 @@ pub struct Origin {
 }
 
 impl Origin {
-    /// `https://api.example.com`, `http://192.168.1.10:8080`, or `https://*.example.com` for
-    /// any subdomain. No path, query or user info.
+    /// `https://api.example.com`, `http://192.168.1.10:8080`, `ws://192.168.1.10:81`, or
+    /// `https://*.example.com` for any subdomain. No path, query or user info.
     pub fn parse(origin: &str) -> Result<Self, String> {
         let uri: http::Uri = origin.parse().map_err(|e| format!("{origin}: {e}"))?;
-        let scheme = match uri.scheme_str() {
-            Some("http") => Scheme::Http,
-            Some("https") => Scheme::Https,
-            _ => return Err(format!("{origin}: scheme must be http or https")),
-        };
+        let scheme = Scheme::parse(uri.scheme_str())
+            .ok_or_else(|| format!("{origin}: scheme must be http, https or ws"))?;
         if uri.path_and_query().is_some_and(|p| p.as_str() != "/") {
             return Err(format!("{origin}: an origin has no path or query"));
         }
@@ -156,10 +175,7 @@ impl Origin {
 
 impl fmt::Display for Origin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let scheme = match self.scheme {
-            Scheme::Http => "http",
-            Scheme::Https => "https",
-        };
+        let scheme = self.scheme.as_str();
         match &self.host {
             Host::Exact(h) => write!(f, "{scheme}://{h}:{}", self.port),
             Host::Subdomains(d) => write!(f, "{scheme}://*.{d}:{}", self.port),
@@ -196,17 +212,24 @@ impl Scope {
 
     /// Checks a request before anything is sent. Implementations call this first.
     pub fn check(&self, request: &Request) -> Result<(), HttpError> {
-        let uri = request.uri();
-        let scheme = match uri.scheme_str() {
-            Some("http") => Scheme::Http,
-            Some("https") => Scheme::Https,
-            _ => {
-                return Err(HttpError::new(
+        self.check_uri(request.uri(), &[Scheme::Http, Scheme::Https])
+    }
+
+    /// Checks a WebSocket URL (`ws://...`) before connecting. Implementations call this first.
+    pub fn check_ws(&self, uri: &http::Uri) -> Result<(), HttpError> {
+        self.check_uri(uri, &[Scheme::Ws])
+    }
+
+    fn check_uri(&self, uri: &http::Uri, schemes: &[Scheme]) -> Result<(), HttpError> {
+        let scheme = Scheme::parse(uri.scheme_str())
+            .filter(|s| schemes.contains(s))
+            .ok_or_else(|| {
+                let names: Vec<&str> = schemes.iter().map(|s| s.as_str()).collect();
+                HttpError::new(
                     HttpErrorKind::Invalid,
-                    format!("{uri}: needs an absolute http or https URI"),
-                ));
-            }
-        };
+                    format!("{uri}: needs an absolute {} URI", names.join(" or ")),
+                )
+            })?;
         let authority = uri
             .authority()
             .ok_or_else(|| HttpError::new(HttpErrorKind::Invalid, format!("{uri}: no host")))?;
@@ -227,6 +250,36 @@ impl Scope {
             ))
         }
     }
+}
+
+/// Outbound WebSocket connections within a scope of `ws://` origins. Blocking: connect, send
+/// and receive from a task, not from `update`.
+pub trait WebSocket: Send + Sync + 'static {
+    /// Connects to `url` and does the handshake. A URL outside the scope is `Denied`, and
+    /// nothing is sent.
+    fn connect(&self, url: &str) -> Result<Box<dyn WsConnection>, HttpError>;
+}
+
+impl<T: WebSocket + ?Sized> WebSocket for std::sync::Arc<T> {
+    fn connect(&self, url: &str) -> Result<Box<dyn WsConnection>, HttpError> {
+        (**self).connect(url)
+    }
+}
+
+/// One open WebSocket connection.
+pub trait WsConnection: Send {
+    fn send(&mut self, message: WsMessage) -> Result<(), HttpError>;
+    /// The next text or binary message. Pings are answered and skipped. `Closed` when the other
+    /// side closed the connection, `Timeout` when nothing came in time.
+    fn recv(&mut self) -> Result<WsMessage, HttpError>;
+    /// Closes the connection, telling the other side. Dropping it without closing also ends it.
+    fn close(&mut self);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WsMessage {
+    Text(String),
+    Binary(Vec<u8>),
 }
 
 fn ip_literal(host: &str) -> Option<IpAddr> {
@@ -362,6 +415,36 @@ mod tests {
         assert!(!allowed(&scope, "http://172.32.0.1:1400/"));
         assert!(!allowed(&scope, "http://speaker.local:1400/"));
         assert!(!allowed(&scope, "https://192.168.178.21:1400/"));
+    }
+
+    #[test]
+    fn websocket_origins_are_separate_from_http() {
+        let scope = Scope::new([Origin::lan(Scheme::Ws, 81), Origin::lan(Scheme::Http, 80)]);
+        let ws = |uri: &str| match scope.check_ws(&uri.parse().unwrap()) {
+            Ok(()) => true,
+            Err(e) if e.kind == HttpErrorKind::Denied => false,
+            Err(e) => panic!("{uri}: {e}"),
+        };
+        assert!(ws("ws://192.168.1.7:81/"));
+        assert!(!ws("ws://192.168.1.7/"));
+        assert!(!ws("ws://8.8.8.8:81/"));
+        assert!(!ws("ws://reader.local:81/"));
+        // An http origin doesn't grant ws, nor the other way round.
+        assert!(!allowed(&scope, "http://192.168.1.7:81/"));
+        assert!(allowed(&scope, "http://192.168.1.7/"));
+        let e = scope
+            .check_ws(&"http://192.168.1.7:81/".parse().unwrap())
+            .unwrap_err();
+        assert_eq!(e.kind, HttpErrorKind::Invalid);
+        assert_eq!(
+            scope.check(&req("ws://192.168.1.7:81/")).unwrap_err().kind,
+            HttpErrorKind::Invalid
+        );
+        assert_eq!(
+            Origin::parse("ws://10.0.0.2:81").unwrap().to_string(),
+            "ws://10.0.0.2:81"
+        );
+        assert!(Origin::parse("wss://10.0.0.2").is_err());
     }
 
     #[test]

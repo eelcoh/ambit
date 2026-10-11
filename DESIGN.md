@@ -209,7 +209,7 @@ pub fn init(clock: impl Clock, kv: impl Kv) -> impl App
   macros), against 14 for the server example. Acceptable for native-only terminal apps; the
   allowlist makes every one a reviewed choice.
 - **Capabilities in order of need.** First increment: `Clock`, `Random`, `Kv`. For the migrations:
-  - `Http` and `Discovery`: built, see below.
+  - `Http`, `Discovery` and `WebSocket`: built, see below.
   - `Dir`: built (`caps/dir`, `caps/dir-native` on cap-std, `SimDir`), in three levels so `init`
     shows what an app can do to the files it gets: `Dir` reads; `DirWrite` also adds files and
     directories but never changes or removes what's there (a book copied to a card can't
@@ -248,6 +248,13 @@ let discovery = NativeDiscovery::new(Targets::new(["urn:schemas-upnp-org:device:
 - Native: ureq with rustls (ring) and the bundled Mozilla roots. Verified against the internet:
   real HTTPS works, an expired certificate is refused (`--ignored` test).
 - Blocking by design: apps call them from a `Cmd::Task`.
+- **`WebSocket`**: `connect(url)` gives a connection with `send`, `recv` (pings answered for
+  the app) and `close`. Same scopes as `Http`, with `ws://` origins (`Origin::lan(Scheme::Ws,
+  81)` for a reader on the local network); an `http` origin doesn't grant `ws` or the other way
+  round. Native: tungstenite over a TCP connection the capability opens, with a connect
+  timeout, a timeout per read and write, and a message size limit (64 KiB default). Sim:
+  `SimWebSocket::serve` plays the server, one closure per connection. Encrypted `wss://` isn't
+  supported yet.
 - **`Authorize`**: the OAuth flow for native apps (RFC 8252). The app builds the provider's URL
   (with `state`, PKCE) and checks what comes back; the capability opens the URL only if it's in
   its scope (`https://accounts.spotify.com`), so an app can't use the browser to reach anywhere

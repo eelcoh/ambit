@@ -1,4 +1,4 @@
-//! SimHttp and SimDiscovery enforce the same scopes as the native ones.
+//! SimHttp, SimDiscovery and SimWebSocket enforce the same scopes as the native ones.
 
 use std::time::Duration;
 
@@ -98,4 +98,54 @@ fn authorize_echoes_state_and_checks_scope() {
         .unwrap_err();
     assert_eq!(e.kind, AuthErrorKind::Timeout, "nothing scripted");
     assert_eq!(auth.opened().len(), 2);
+}
+
+#[test]
+fn websocket_scope_server_and_record() {
+    use ambit_caps_net::{WebSocket, WsMessage};
+    use ambit_caps_sim::SimWebSocket;
+
+    let ws = SimWebSocket::new(Scope::new([Origin::lan(Scheme::Ws, 81)]));
+    ws.serve(|url| {
+        url.starts_with("ws://192.168.1.7:81").then(|| {
+            let mut received = 0;
+            Box::new(move |message| match message {
+                WsMessage::Text(t) if t.starts_with("START:") => {
+                    vec![WsMessage::Text("READY".into())]
+                }
+                WsMessage::Binary(b) => {
+                    received += b.len();
+                    vec![WsMessage::Text(format!("PROGRESS:{received}"))]
+                }
+                _ => vec![],
+            }) as ambit_caps_sim::WsServer
+        })
+    });
+
+    let denied = ws.connect("ws://8.8.8.8:81/").map(drop).unwrap_err();
+    assert_eq!(denied.kind, HttpErrorKind::Denied);
+    let nobody = ws.connect("ws://192.168.1.8:81/").map(drop).unwrap_err();
+    assert_eq!(nobody.kind, HttpErrorKind::Network);
+
+    let mut conn = ws.connect("ws://192.168.1.7:81/").unwrap();
+    conn.send(WsMessage::Text("START:a".into())).unwrap();
+    assert_eq!(conn.recv().unwrap(), WsMessage::Text("READY".into()));
+    conn.send(WsMessage::Binary(vec![0; 3])).unwrap();
+    conn.send(WsMessage::Binary(vec![0; 4])).unwrap();
+    assert_eq!(conn.recv().unwrap(), WsMessage::Text("PROGRESS:3".into()));
+    assert_eq!(conn.recv().unwrap(), WsMessage::Text("PROGRESS:7".into()));
+    assert_eq!(conn.recv().unwrap_err().kind, HttpErrorKind::Timeout);
+    conn.close();
+    assert_eq!(
+        conn.send(WsMessage::Text("x".into())).unwrap_err().kind,
+        HttpErrorKind::Closed
+    );
+    assert_eq!(ws.sent().len(), 3);
+    assert_eq!(
+        ws.sent()[0],
+        (
+            "ws://192.168.1.7:81/".to_string(),
+            WsMessage::Text("START:a".into())
+        )
+    );
 }

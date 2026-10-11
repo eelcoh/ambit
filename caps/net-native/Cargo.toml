@@ -8,4 +8,8 @@ publish.workspace = true
 [dependencies]
 ambit-caps-net.workspace = true
 httparse.workspace = true
+tungstenite.workspace = true
 ureq.workspace = true
+
+[dev-dependencies]
+tungstenite.workspace = true

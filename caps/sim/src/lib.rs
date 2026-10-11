@@ -15,7 +15,8 @@ use ambit_caps_dir::{
 };
 use ambit_caps_net::{
     AuthError, AuthErrorKind, Authorize, Device, Discovery, DiscoveryError, Http, HttpError,
-    HttpErrorKind, Params, Request, Response, Scope, Targets, http,
+    HttpErrorKind, Params, Request, Response, Scope, Targets, WebSocket, WsConnection, WsMessage,
+    http,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -242,6 +243,100 @@ impl Http for SimHttp {
                     ),
                 ))
             })
+    }
+}
+
+/// One simulated WebSocket server connection: gets each message the app sends, returns the
+/// messages it answers with.
+pub type WsServer = Box<dyn FnMut(WsMessage) -> Vec<WsMessage> + Send>;
+
+type WsAccept = Arc<dyn Fn(&str) -> Option<WsServer> + Send + Sync>;
+
+/// WebSocket servers behind the same scope check as production. URLs the scope denies fail
+/// with `Denied`; URLs nothing serves fail with `Network`. `recv` with nothing to receive is
+/// `Timeout`: in a test, nothing more will come.
+#[derive(Clone)]
+pub struct SimWebSocket {
+    scope: Arc<Scope>,
+    servers: Arc<Mutex<Vec<WsAccept>>>,
+    sent: Arc<Mutex<Vec<(String, WsMessage)>>>,
+}
+
+impl SimWebSocket {
+    pub fn new(scope: Scope) -> Self {
+        Self {
+            scope: Arc::new(scope),
+            servers: Arc::default(),
+            sent: Arc::default(),
+        }
+    }
+
+    /// Serves connections: `accept` gets the URL and returns a server for this connection, or
+    /// `None` to leave it to the next. Later ones take precedence over earlier ones.
+    pub fn serve(&self, accept: impl Fn(&str) -> Option<WsServer> + Send + Sync + 'static) {
+        lock(&self.servers).push(Arc::new(accept));
+    }
+
+    /// Messages the app sent, with the URL of their connection, in order.
+    pub fn sent(&self) -> Vec<(String, WsMessage)> {
+        lock(&self.sent).clone()
+    }
+}
+
+impl WebSocket for SimWebSocket {
+    fn connect(&self, url: &str) -> Result<Box<dyn WsConnection>, HttpError> {
+        let uri: http::Uri = url
+            .parse()
+            .map_err(|e| HttpError::new(HttpErrorKind::Invalid, format!("{url}: {e}")))?;
+        self.scope.check_ws(&uri)?;
+        let servers = lock(&self.servers).clone();
+        let server = servers
+            .iter()
+            .rev()
+            .find_map(|accept| accept(url))
+            .ok_or_else(|| {
+                HttpError::new(HttpErrorKind::Network, format!("sim: nothing serves {url}"))
+            })?;
+        Ok(Box::new(SimWsConnection {
+            url: url.to_string(),
+            server,
+            inbox: VecDeque::new(),
+            closed: false,
+            sent: self.sent.clone(),
+        }))
+    }
+}
+
+struct SimWsConnection {
+    url: String,
+    server: WsServer,
+    inbox: VecDeque<WsMessage>,
+    closed: bool,
+    sent: Arc<Mutex<Vec<(String, WsMessage)>>>,
+}
+
+impl WsConnection for SimWsConnection {
+    fn send(&mut self, message: WsMessage) -> Result<(), HttpError> {
+        if self.closed {
+            return Err(HttpError::new(HttpErrorKind::Closed, "closed"));
+        }
+        lock(&self.sent).push((self.url.clone(), message.clone()));
+        let replies = (self.server)(message);
+        self.inbox.extend(replies);
+        Ok(())
+    }
+
+    fn recv(&mut self) -> Result<WsMessage, HttpError> {
+        if self.closed {
+            return Err(HttpError::new(HttpErrorKind::Closed, "closed"));
+        }
+        self.inbox
+            .pop_front()
+            .ok_or_else(|| HttpError::new(HttpErrorKind::Timeout, "sim: nothing more to receive"))
+    }
+
+    fn close(&mut self) {
+        self.closed = true;
     }
 }
 
