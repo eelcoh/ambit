@@ -1,0 +1,6 @@
+[package]
+name = "ambit-caps-dir"
+description = "Read-only directory capability: one tree the app can read but not escape. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true

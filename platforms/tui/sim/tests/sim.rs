@@ -25,6 +25,7 @@ impl App for Recorder {
                 self.seen.push((m, self.clock.elapsed()));
                 (self.on)(m)
             }
+            Event::Resize(..) => Cmd::None,
             _ => Cmd::Quit,
         }
     }
@@ -94,4 +95,28 @@ fn nothing_runs_after_quit() {
     assert!(sim.quit());
     sim.key('x');
     assert!(sim.app().seen.is_empty());
+}
+
+/// Records the events it gets, not just messages.
+struct Events(Vec<String>);
+
+impl App for Events {
+    type Msg = &'static str;
+    fn start(&mut self) -> Cmd<&'static str> {
+        Cmd::Batch(vec![Cmd::serial(|| "one"), Cmd::serial(|| "two")])
+    }
+    fn update(&mut self, event: Event<&'static str>) -> Cmd<&'static str> {
+        self.0.push(format!("{event:?}"));
+        Cmd::None
+    }
+    fn view(&self, _: Rect, _: &mut Buffer) {}
+}
+
+#[test]
+fn the_first_event_is_the_size_then_serial_tasks_in_order() {
+    let sim = Sim::new(Events(Vec::new()), SimClock::at(UNIX_EPOCH), 80, 24);
+    assert_eq!(
+        sim.app().0,
+        ["Resize(80, 24)", "Msg(\"one\")", "Msg(\"two\")"]
+    );
 }

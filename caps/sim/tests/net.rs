@@ -62,3 +62,40 @@ fn discovery_checks_targets() {
     sim.remove(ip);
     assert!(sim.ssdp(player, Duration::from_secs(1)).unwrap().is_empty());
 }
+
+#[test]
+fn authorize_echoes_state_and_checks_scope() {
+    use ambit_caps_net::{AuthErrorKind, Authorize};
+    use ambit_caps_sim::SimAuthorize;
+
+    let auth = SimAuthorize::new(
+        Scope::parse(["https://accounts.spotify.com"]).unwrap(),
+        "http://127.0.0.1:8989/callback",
+    );
+    auth.approve(&[("code", "c1")]);
+    let params = auth
+        .authorize(
+            "https://accounts.spotify.com/authorize?state=s9&x=1",
+            Duration::from_secs(1),
+        )
+        .unwrap();
+    assert_eq!(
+        params,
+        [
+            ("code".to_string(), "c1".to_string()),
+            ("state".to_string(), "s9".to_string())
+        ]
+    );
+    let e = auth
+        .authorize("https://evil.example/", Duration::from_secs(1))
+        .unwrap_err();
+    assert_eq!(e.kind, AuthErrorKind::Denied);
+    let e = auth
+        .authorize(
+            "https://accounts.spotify.com/authorize",
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
+    assert_eq!(e.kind, AuthErrorKind::Timeout, "nothing scripted");
+    assert_eq!(auth.opened().len(), 2);
+}

@@ -5,13 +5,14 @@
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeSet;
-use std::io::Read;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::io::{Read, Write};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, UdpSocket};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use ambit_caps_net::{
-    Device, Discovery, DiscoveryError, Http, HttpError, HttpErrorKind, Request, Response, Scope,
-    Targets, is_lan,
+    AuthError, AuthErrorKind, Authorize, Device, Discovery, DiscoveryError, Http, HttpError,
+    HttpErrorKind, Params, Request, Response, Scope, Targets, is_lan, parse_query,
 };
 
 pub struct HttpOptions {
@@ -180,6 +181,124 @@ fn parse(datagram: &[u8], addr: IpAddr, target: &str) -> Option<Device> {
         location: get("location"),
         headers,
     })
+}
+
+/// The loopback flow: opens the system browser (`xdg-open` on Linux, `open` on macOS) and
+/// listens on `127.0.0.1:<port>` for the one redirect back, for as long as `authorize` waits.
+pub struct NativeAuthorize {
+    scope: Scope,
+    port: u16,
+    browser: bool,
+}
+
+const CALLBACK_PATH: &str = "/callback";
+const DONE_PAGE: &str = "<!doctype html><title>Done</title>\
+    <p>Done. You can close this tab and go back to the terminal.";
+
+impl NativeAuthorize {
+    /// `scope`: what may be opened in the browser (the provider's authorize page). `port`: the
+    /// loopback port registered with the provider.
+    pub fn new(scope: Scope, port: u16) -> Self {
+        Self {
+            scope,
+            port,
+            browser: true,
+        }
+    }
+
+    /// Doesn't start a browser: the user opens the URL the app shows. For remote sessions,
+    /// and for tests.
+    pub fn without_browser(mut self) -> Self {
+        self.browser = false;
+        self
+    }
+}
+
+impl Authorize for NativeAuthorize {
+    fn redirect_uri(&self) -> String {
+        format!("http://127.0.0.1:{}{CALLBACK_PATH}", self.port)
+    }
+
+    fn authorize(&self, url: &str, timeout: Duration) -> Result<Params, AuthError> {
+        self.scope.check_url(url)?;
+        let io = |e: std::io::Error| AuthError::new(AuthErrorKind::Io, e.to_string());
+        // Listen before opening the browser, so the redirect can't arrive first.
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, self.port)).map_err(io)?;
+        listener.set_nonblocking(true).map_err(io)?;
+        if self.browser {
+            open_browser(url);
+        }
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut conn, _)) => {
+                    if let Some(params) = callback(&mut conn) {
+                        return Ok(params);
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(e) => return Err(io(e)),
+            }
+        }
+        Err(AuthError::new(
+            AuthErrorKind::Timeout,
+            "no redirect came back",
+        ))
+    }
+}
+
+/// Handles one connection: the callback gets the done page and its query; anything else
+/// (a favicon request) gets a 404 and `None`.
+fn callback(conn: &mut std::net::TcpStream) -> Option<Params> {
+    conn.set_nonblocking(false).ok()?;
+    conn.set_read_timeout(Some(Duration::from_secs(5))).ok()?;
+    let mut head = Vec::new();
+    let mut buf = [0u8; 1024];
+    while !head.windows(4).any(|w| w == b"\r\n\r\n") && head.len() < 8192 {
+        let n = conn.read(&mut buf).ok()?;
+        if n == 0 {
+            return None;
+        }
+        head.extend_from_slice(&buf[..n]);
+    }
+    let mut headers = [httparse::EMPTY_HEADER; 32];
+    let mut request = httparse::Request::new(&mut headers);
+    request.parse(&head).ok()?;
+    let target = request.path.unwrap_or("");
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    if request.method != Some("GET") || path != CALLBACK_PATH {
+        let _ = conn
+            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        return None;
+    }
+    let _ = write!(
+        conn,
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\
+         Connection: close\r\n\r\n{DONE_PAGE}",
+        DONE_PAGE.len()
+    );
+    Some(parse_query(query))
+}
+
+/// Best effort; the app shows the URL as well. Output goes nowhere: the terminal is the app's.
+fn open_browser(url: &str) {
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let child = Command::new(opener)
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    if let Ok(mut child) = child {
+        // Reap it when it exits.
+        std::thread::spawn(move || child.wait());
+    }
 }
 
 #[cfg(test)]

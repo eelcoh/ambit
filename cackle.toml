@@ -322,6 +322,9 @@ allow_unsafe = true
 allow_apis = [
     "net",
 ]
+test.allow_apis = [
+    "process",
+]
 
 [pkg.ureq]
 from.test.allow_apis = [
@@ -364,7 +367,68 @@ allow_apis = [
     "process",
 ]
 
+[pkg.io-lifetimes]
+build.allow_apis = [
+    "env",
+    "process",
+]
+allow_unsafe = true
+
+[pkg.io-extras]
+build.allow_apis = [
+    "env",
+    "process",
+]
+allow_unsafe = true
+
+[pkg.cap-primitives]
+build.allow_apis = [
+    "env",
+    "process",
+]
+allow_unsafe = true
+from.test.allow_apis = [
+    "fs",
+]
+
+[pkg.fs-set-times]
+allow_unsafe = true
+
+[pkg.rustix-linux-procfs]
+allow_unsafe = true
+
+[pkg.cap-std]
+build.allow_apis = [
+    "env",
+    "process",
+]
+allow_unsafe = true
+from.test.allow_apis = [
+    "fs",
+]
+
+[pkg.ambit-caps-dir-native]
+test.allow_apis = [
+    "env",
+    "fs",
+    "process",
+]
+
 [api.net]
 include = [
+    "cap-primitives::net",
+    "cap-std::net",
     "mio::net",
+]
+
+[api.fs]
+include = [
+    "cap-primitives::fs",
+    "cap-std::fs",
+    "rustix::fs",
+]
+
+[api.process]
+include = [
+    "rustix::process",
 ]

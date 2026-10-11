@@ -1,8 +1,8 @@
 //! Native terminal backend for the tui platform: crossterm on Linux/Mac.
 //!
 //! Owns the terminal: raw mode, the alternate screen and bracketed paste, restored on return,
-//! on error and on panic. Runs tasks on a fixed pool of worker threads and timers on the
-//! monotonic clock.
+//! on error and on panic. Runs tasks on a fixed pool of worker threads, serial tasks on one more
+//! thread of their own, and timers on the monotonic clock.
 #![forbid(unsafe_code)]
 
 use std::fs::File;
@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-pub use ambit_caps_native::{NativeKv, OsRandom, StdClock};
+pub use ambit_caps_native::{MemKv, NativeKv, OsRandom, StdClock};
 use ambit_tui::{App, Cmd, Event, Key, KeyCode, Mods, Task, flatten};
 use ratatui_core::terminal::Terminal;
 use ratatui_crossterm::CrosstermBackend;
@@ -60,6 +60,7 @@ struct Loop<A: App> {
     _tx: Sender<Input<A::Msg>>,
     rx: Receiver<Input<A::Msg>>,
     jobs: Sender<Task<A::Msg>>,
+    serial: Sender<Task<A::Msg>>,
     timers: Vec<(Instant, u64, A::Msg)>,
     next_timer: u64,
 }
@@ -73,6 +74,11 @@ impl<A: App> Loop<A> {
             let (queue, tx) = (queue.clone(), tx.clone());
             thread::spawn(move || worker(&queue, &tx));
         }
+        // One worker on its own queue: serial tasks run one at a time, in order.
+        let (serial, serial_queue) = mpsc::channel::<Task<A::Msg>>();
+        let serial_queue = Arc::new(Mutex::new(serial_queue));
+        let serial_tx = tx.clone();
+        thread::spawn(move || worker(&serial_queue, &serial_tx));
         let input = tx.clone();
         thread::spawn(move || {
             loop {
@@ -93,6 +99,7 @@ impl<A: App> Loop<A> {
             _tx: tx,
             rx,
             jobs,
+            serial,
             timers: Vec::new(),
             next_timer: 0,
         }
@@ -101,6 +108,11 @@ impl<A: App> Loop<A> {
     fn run(&mut self, term: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
         let start = self.app.start();
         if self.exec(start) {
+            return Ok(());
+        }
+        let size = term.size()?;
+        let cmd = self.app.update(Event::Resize(size.width, size.height));
+        if self.exec(cmd) {
             return Ok(());
         }
         loop {
@@ -174,6 +186,9 @@ impl<A: App> Loop<A> {
                 }
                 Cmd::Task(work) => {
                     self.jobs.send(work).expect("workers outlive the loop");
+                }
+                Cmd::Serial(work) => {
+                    self.serial.send(work).expect("workers outlive the loop");
                 }
                 Cmd::None | Cmd::Batch(_) => unreachable!("flattened"),
             }

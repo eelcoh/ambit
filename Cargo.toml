@@ -6,6 +6,8 @@ members = [
     "caps/native",
     "caps/sim",
     "caps/net",
+    "caps/dir",
+    "caps/dir-native",
     "caps/net-native",
     "caps/conformance",
     "platforms/server/api",
@@ -37,6 +39,8 @@ ambit-caps-std = { path = "caps/std" }
 ambit-caps-native = { path = "caps/native" }
 ambit-caps-sim = { path = "caps/sim" }
 ambit-caps-net = { path = "caps/net" }
+ambit-caps-dir = { path = "caps/dir" }
+ambit-caps-dir-native = { path = "caps/dir-native" }
 ambit-caps-net-native = { path = "caps/net-native" }
 ambit-caps-conformance = { path = "caps/conformance" }
 ambit-server = { path = "platforms/server/api" }
@@ -50,6 +54,7 @@ ambit-tui-sim = { path = "platforms/tui/sim" }
 shortener = { path = "apps/shortener" }
 todo = { path = "apps/todo" }
 
+cap-std = "4.0.3"
 getrandom = "0.3"
 # Kernel features are added per crate; see DESIGN.md "Hermit: minimal by default".
 hermit = { git = "https://github.com/hermit-os/hermit-rs.git", tag = "hermit-0.13.2", default-features = false }

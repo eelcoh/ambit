@@ -52,3 +52,74 @@ pub fn kv(kv: &impl Kv) {
     assert_eq!(all.len(), 7, "empty prefix scans everything");
     assert!(all.iter().all(|(k, v)| k == v));
 }
+
+/// The tree every `Dir` under test must hold: files with their contents, and one empty
+/// directory, `empty`.
+pub const DIR_FILES: &[(&str, &str)] = &[
+    ("two.txt", "two"),
+    ("a/one.txt", "one"),
+    ("a/b/deep.txt", "deep"),
+];
+
+/// Expects a `Dir` holding exactly [`DIR_FILES`] plus the empty directory `empty`.
+pub fn dir(dir: &impl ambit_caps_dir::Dir) {
+    use ambit_caps_dir::{DirErrorKind, Entry, RelPath};
+    use std::io::{Read, Seek, SeekFrom};
+
+    let path = |p: &str| RelPath::parse(p).unwrap();
+    for (name, contents) in DIR_FILES {
+        let mut text = String::new();
+        dir.open(&path(name))
+            .unwrap()
+            .read_to_string(&mut text)
+            .unwrap();
+        assert_eq!(&text, contents, "{name}");
+        let meta = dir.metadata(&path(name)).unwrap();
+        assert!(!meta.is_dir, "{name}");
+        assert_eq!(meta.len, contents.len() as u64, "{name}");
+    }
+
+    let mut file = dir.open(&path("a/b/deep.txt")).unwrap();
+    file.seek(SeekFrom::Start(2)).unwrap();
+    let mut rest = String::new();
+    file.read_to_string(&mut rest).unwrap();
+    assert_eq!(rest, "ep");
+
+    let entry = |name: &str, is_dir| Entry {
+        name: name.to_string(),
+        is_dir,
+    };
+    assert_eq!(
+        dir.list(&RelPath::root()).unwrap(),
+        [
+            entry("a", true),
+            entry("empty", true),
+            entry("two.txt", false)
+        ]
+    );
+    assert_eq!(
+        dir.list(&path("a")).unwrap(),
+        [entry("b", true), entry("one.txt", false)]
+    );
+    assert!(dir.list(&path("empty")).unwrap().is_empty());
+    assert!(dir.metadata(&path("a")).unwrap().is_dir);
+    assert!(dir.metadata(&RelPath::root()).unwrap().is_dir);
+
+    let kind = |r: Result<(), ambit_caps_dir::DirError>| r.unwrap_err().kind;
+    assert_eq!(
+        kind(dir.open(&path("nope")).map(drop)),
+        DirErrorKind::NotFound
+    );
+    assert_eq!(
+        kind(dir.metadata(&path("a/nope")).map(drop)),
+        DirErrorKind::NotFound
+    );
+    assert_eq!(
+        kind(dir.open(&path("a")).map(drop)),
+        DirErrorKind::WrongKind
+    );
+    assert_eq!(
+        kind(dir.list(&path("two.txt")).map(drop)),
+        DirErrorKind::WrongKind
+    );
+}

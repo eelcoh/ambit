@@ -17,7 +17,8 @@ pub enum Event<M> {
     Key(Key),
     /// Text pasted into the terminal, in one piece.
     Paste(String),
-    /// The terminal has a new size (columns, rows). The platform redraws after every event.
+    /// The terminal size (columns, rows). Always the first event, right after `start`, and again
+    /// whenever the size changes. The platform redraws after every event.
     Resize(u16, u16),
     /// A message the app asked for: the result of a `Task` or an `After` timer.
     Msg(M),
@@ -112,13 +113,22 @@ pub enum Cmd<M> {
     Batch(Vec<Cmd<M>>),
     /// Deliver `M` after this long, measured on the platform's clock.
     After(Duration, M),
-    /// Run this on the platform's worker pool and deliver its result.
+    /// Run this on the platform's worker pool and deliver its result. Tasks run concurrently:
+    /// results can arrive in any order.
     Task(Task<M>),
+    /// Run this after every earlier `Serial` task has finished, one at a time, in the order
+    /// asked. For effects that must not overlap (one device, one session). Still off the UI
+    /// thread; `Task`s keep running alongside.
+    Serial(Task<M>),
 }
 
 impl<M> Cmd<M> {
     pub fn task(work: impl FnOnce() -> M + Send + 'static) -> Self {
         Self::Task(Box::new(work))
+    }
+
+    pub fn serial(work: impl FnOnce() -> M + Send + 'static) -> Self {
+        Self::Serial(Box::new(work))
     }
 }
 

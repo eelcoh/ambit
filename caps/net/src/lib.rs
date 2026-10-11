@@ -397,6 +397,43 @@ mod tests {
     }
 
     #[test]
+    fn queries_decode() {
+        assert_eq!(
+            parse_query("code=a%2Fb+c&state=xyz&flag&bad=%zz&end=%4"),
+            [
+                ("code".to_string(), "a/b c".to_string()),
+                ("state".to_string(), "xyz".to_string()),
+                ("flag".to_string(), String::new()),
+                ("bad".to_string(), "%zz".to_string()),
+                ("end".to_string(), "%4".to_string()),
+            ]
+        );
+        assert_eq!(parse_query("x=%41"), [("x".to_string(), "A".to_string())]);
+    }
+
+    #[test]
+    fn only_scoped_http_urls_may_be_opened() {
+        let scope = Scope::parse(["https://accounts.spotify.com"]).unwrap();
+        assert!(
+            scope
+                .check_url("https://accounts.spotify.com/authorize?x=1")
+                .is_ok()
+        );
+        for url in [
+            "https://evil.example/",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "not a url",
+        ] {
+            assert_eq!(
+                scope.check_url(url).unwrap_err().kind,
+                AuthErrorKind::Denied,
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
     fn discovery_targets_are_exact() {
         let targets = Targets::new(["urn:schemas-upnp-org:device:ZonePlayer:1"]);
         assert!(
@@ -406,4 +443,114 @@ mod tests {
         );
         assert!(targets.check("ssdp:all").unwrap_err().denied);
     }
+}
+
+/// Lets the user approve access in their browser: the OAuth 2.0 authorization-code flow for
+/// native apps, with a loopback redirect (RFC 8252). The app builds the provider's URL, with
+/// its own `state` (and PKCE), and checks `state` in what comes back.
+/// Decoded query parameters, in order.
+pub type Params = Vec<(String, String)>;
+
+pub trait Authorize: Send + Sync + 'static {
+    /// Where the provider must send the browser back, e.g. `http://127.0.0.1:8989/callback`.
+    /// Fixed by the wiring: providers only accept a registered redirect URI.
+    fn redirect_uri(&self) -> String;
+
+    /// Opens `url` in the user's browser and waits up to `timeout` for the redirect back.
+    /// Returns the redirect's query parameters, decoded. `url` must be in the granted scope;
+    /// nothing is opened otherwise. Blocking: call it from a task. Opening the browser can fail
+    /// silently (no browser, a remote session), so the app should also show `url` itself.
+    fn authorize(&self, url: &str, timeout: Duration) -> Result<Params, AuthError>;
+}
+
+impl<T: Authorize + ?Sized> Authorize for std::sync::Arc<T> {
+    fn redirect_uri(&self) -> String {
+        (**self).redirect_uri()
+    }
+    fn authorize(&self, url: &str, timeout: Duration) -> Result<Params, AuthError> {
+        (**self).authorize(url, timeout)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthErrorKind {
+    /// `url` is outside the granted scope, or not an http(s) URL. Nothing was opened.
+    Denied,
+    /// No redirect came back in time.
+    Timeout,
+    /// The loopback address couldn't be used (e.g. the port is taken).
+    Io,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthError {
+    pub kind: AuthErrorKind,
+    pub message: String,
+}
+
+impl AuthError {
+    pub fn new(kind: AuthErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "authorize {:?}: {}", self.kind, self.message)
+    }
+}
+
+impl std::error::Error for AuthError {}
+
+impl Scope {
+    /// Checks a URL the platform would open for the user (a browser, not a request).
+    pub fn check_url(&self, url: &str) -> Result<(), AuthError> {
+        let denied = |message: String| AuthError::new(AuthErrorKind::Denied, message);
+        let request = http::Request::get(url)
+            .body(Vec::new())
+            .map_err(|e| denied(format!("{url}: {e}")))?;
+        self.check(&request).map_err(|e| denied(e.message))
+    }
+}
+
+/// Splits and percent-decodes a query string (`a=1&b=x%20y`; `+` is a space).
+pub fn parse_query(query: &str) -> Params {
+    query
+        .split('&')
+        .filter(|pair| !pair.is_empty())
+        .map(|pair| {
+            let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+            (percent_decode(k), percent_decode(v))
+        })
+        .collect()
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => out.push(b' '),
+            // Two hex digits must follow.
+            b'%' if i + 2 < bytes.len() => {
+                match std::str::from_utf8(&bytes[i + 1..i + 3])
+                    .ok()
+                    .and_then(|h| u8::from_str_radix(h, 16).ok())
+                {
+                    Some(b) => {
+                        out.push(b);
+                        i += 2;
+                    }
+                    None => out.push(b'%'),
+                }
+            }
+            b => out.push(b),
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }

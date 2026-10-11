@@ -2,16 +2,19 @@
 //! after handing one to `init`.
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, SystemTime};
 
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::net::IpAddr;
 
 use ambit_caps::{Clock, Entry, Kv, KvError, Random};
+use ambit_caps_dir::{
+    Dir, DirError, DirErrorKind, Entry as DirEntry, File as DirFile, Meta, RelPath,
+};
 use ambit_caps_net::{
-    Device, Discovery, DiscoveryError, Http, HttpError, HttpErrorKind, Request, Response, Scope,
-    Targets, http,
+    AuthError, AuthErrorKind, Authorize, Device, Discovery, DiscoveryError, Http, HttpError,
+    HttpErrorKind, Params, Request, Response, Scope, Targets, http,
 };
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -94,10 +97,10 @@ pub enum Faults {
     Writes,
 }
 
-/// An in-memory store, with injectable failures.
+/// An in-memory store, with injectable failures. Without failures it is `ambit_caps_std::MemKv`.
 #[derive(Clone, Default)]
 pub struct MemKv {
-    map: Arc<Mutex<BTreeMap<Vec<u8>, Vec<u8>>>>,
+    inner: ambit_caps_std::MemKv,
     faults: Arc<Mutex<Faults>>,
 }
 
@@ -107,11 +110,11 @@ impl MemKv {
     }
 
     pub fn len(&self) -> usize {
-        lock(&self.map).len()
+        self.inner.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.inner.is_empty()
     }
 
     /// From now on, fail the operations `faults` selects.
@@ -131,25 +134,19 @@ impl MemKv {
 impl Kv for MemKv {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, KvError> {
         self.check(false)?;
-        Ok(lock(&self.map).get(key).cloned())
+        self.inner.get(key)
     }
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), KvError> {
         self.check(true)?;
-        lock(&self.map).insert(key.to_vec(), value.to_vec());
-        Ok(())
+        self.inner.put(key, value)
     }
     fn delete(&self, key: &[u8]) -> Result<(), KvError> {
         self.check(true)?;
-        lock(&self.map).remove(key);
-        Ok(())
+        self.inner.delete(key)
     }
     fn scan(&self, prefix: &[u8]) -> Result<Vec<Entry>, KvError> {
         self.check(false)?;
-        Ok(lock(&self.map)
-            .range(prefix.to_vec()..)
-            .take_while(|(k, _)| k.starts_with(prefix))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect())
+        self.inner.scan(prefix)
     }
 }
 
@@ -288,5 +285,201 @@ impl Discovery for SimDiscovery {
             .filter(|(t, _)| t == target)
             .map(|(_, d)| d.clone())
             .collect())
+    }
+}
+
+/// An in-memory directory tree. Directories exist when created or when a file is in them.
+#[derive(Clone, Default)]
+pub struct SimDir {
+    tree: Arc<Mutex<SimTree>>,
+}
+
+#[derive(Default)]
+struct SimTree {
+    files: BTreeMap<Vec<String>, Vec<u8>>,
+    dirs: BTreeSet<Vec<String>>,
+}
+
+impl SimDir {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds or replaces a file at `path` (`"a/b.flac"`), creating its directories.
+    pub fn file(&self, path: &str, contents: impl Into<Vec<u8>>) -> &Self {
+        let parts = RelPath::parse(path)
+            .expect("valid sim path")
+            .parts()
+            .to_vec();
+        let mut tree = lock(&self.tree);
+        for i in 1..parts.len() {
+            tree.dirs.insert(parts[..i].to_vec());
+        }
+        tree.files.insert(parts, contents.into());
+        self
+    }
+
+    /// Adds an (empty) directory at `path`, and its parents.
+    pub fn dir(&self, path: &str) -> &Self {
+        let parts = RelPath::parse(path)
+            .expect("valid sim path")
+            .parts()
+            .to_vec();
+        let mut tree = lock(&self.tree);
+        for i in 1..=parts.len() {
+            tree.dirs.insert(parts[..i].to_vec());
+        }
+        self
+    }
+
+    /// Removes the file or directory at `path`, and everything under it.
+    pub fn remove(&self, path: &str) {
+        let parts = RelPath::parse(path)
+            .expect("valid sim path")
+            .parts()
+            .to_vec();
+        let mut tree = lock(&self.tree);
+        tree.files.retain(|p, _| !p.starts_with(&parts));
+        tree.dirs.retain(|p| !p.starts_with(&parts));
+    }
+}
+
+impl SimTree {
+    fn is_dir(&self, parts: &[String]) -> bool {
+        parts.is_empty() || self.dirs.contains(parts)
+    }
+
+    fn not_found(path: &RelPath) -> DirError {
+        DirError::new(DirErrorKind::NotFound, path.to_string())
+    }
+}
+
+impl Dir for SimDir {
+    fn metadata(&self, path: &RelPath) -> Result<Meta, DirError> {
+        let tree = lock(&self.tree);
+        if tree.is_dir(path.parts()) {
+            return Ok(Meta {
+                is_dir: true,
+                len: 0,
+                modified: None,
+            });
+        }
+        let file = tree
+            .files
+            .get(path.parts())
+            .ok_or_else(|| SimTree::not_found(path))?;
+        Ok(Meta {
+            is_dir: false,
+            len: file.len() as u64,
+            modified: None,
+        })
+    }
+
+    fn open(&self, path: &RelPath) -> Result<Box<dyn DirFile>, DirError> {
+        let tree = lock(&self.tree);
+        if tree.is_dir(path.parts()) {
+            return Err(DirError::new(
+                DirErrorKind::WrongKind,
+                format!("{path}: is a directory"),
+            ));
+        }
+        let file = tree
+            .files
+            .get(path.parts())
+            .ok_or_else(|| SimTree::not_found(path))?;
+        Ok(Box::new(std::io::Cursor::new(file.clone())))
+    }
+
+    fn list(&self, path: &RelPath) -> Result<Vec<DirEntry>, DirError> {
+        let tree = lock(&self.tree);
+        let parts = path.parts();
+        if !tree.is_dir(parts) {
+            let kind = if tree.files.contains_key(parts) {
+                DirErrorKind::WrongKind
+            } else {
+                DirErrorKind::NotFound
+            };
+            return Err(DirError::new(kind, path.to_string()));
+        }
+        let child = |p: &Vec<String>| {
+            (p.len() == parts.len() + 1 && p.starts_with(parts)).then(|| p[parts.len()].clone())
+        };
+        let mut entries: Vec<DirEntry> = tree
+            .dirs
+            .iter()
+            .filter_map(child)
+            .map(|name| DirEntry { name, is_dir: true })
+            .chain(tree.files.keys().filter_map(child).map(|name| DirEntry {
+                name,
+                is_dir: false,
+            }))
+            .collect();
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(entries)
+    }
+}
+
+/// A user who approves in the browser, scripted. Behind the same scope check as production;
+/// records what would have been opened.
+#[derive(Clone)]
+pub struct SimAuthorize {
+    scope: Arc<Scope>,
+    redirect_uri: String,
+    answers: Arc<Mutex<VecDeque<Result<Params, AuthError>>>>,
+    opened: Arc<Mutex<Vec<String>>>,
+}
+
+impl SimAuthorize {
+    pub fn new(scope: Scope, redirect_uri: &str) -> Self {
+        Self {
+            scope: Arc::new(scope),
+            redirect_uri: redirect_uri.to_string(),
+            answers: Arc::default(),
+            opened: Arc::default(),
+        }
+    }
+
+    /// The next `authorize` returns these parameters, as if the browser came back with them.
+    /// `state` from the opened URL is echoed back unless `params` has one.
+    pub fn approve(&self, params: &[(&str, &str)]) {
+        let params = params
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        lock(&self.answers).push_back(Ok(params));
+    }
+
+    /// The next `authorize` fails with `kind` (e.g. `Timeout`: the user never came back).
+    pub fn fail(&self, kind: AuthErrorKind) {
+        lock(&self.answers).push_back(Err(AuthError::new(kind, "injected failure")));
+    }
+
+    /// URLs that passed the scope check, in order.
+    pub fn opened(&self) -> Vec<String> {
+        lock(&self.opened).clone()
+    }
+}
+
+impl Authorize for SimAuthorize {
+    fn redirect_uri(&self) -> String {
+        self.redirect_uri.clone()
+    }
+
+    fn authorize(&self, url: &str, _timeout: Duration) -> Result<Params, AuthError> {
+        self.scope.check_url(url)?;
+        lock(&self.opened).push(url.to_string());
+        let mut params = lock(&self.answers)
+            .pop_front()
+            .unwrap_or_else(|| Err(AuthError::new(AuthErrorKind::Timeout, "nobody approved")))?;
+        // Echo `state` from the URL unless the test set one: what a real provider does.
+        if !params.iter().any(|(k, _)| k == "state")
+            && let Some((_, query)) = url.split_once('?')
+            && let Some(state) = ambit_caps_net::parse_query(query)
+                .into_iter()
+                .find(|(k, _)| k == "state")
+        {
+            params.push(state);
+        }
+        Ok(params)
     }
 }

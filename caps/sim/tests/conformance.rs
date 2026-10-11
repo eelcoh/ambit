@@ -18,3 +18,13 @@ fn random() {
 fn kv() {
     ambit_caps_conformance::kv(&MemKv::new());
 }
+
+#[test]
+fn dir() {
+    let dir = ambit_caps_sim::SimDir::new();
+    for (path, contents) in ambit_caps_conformance::DIR_FILES {
+        dir.file(path, *contents);
+    }
+    dir.dir("empty");
+    ambit_caps_conformance::dir(&dir);
+}

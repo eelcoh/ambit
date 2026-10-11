@@ -170,7 +170,8 @@ pub use ratatui_core::{buffer::Buffer, layout::Rect};   // and ratatui-widgets f
 pub enum Event<M> { Key(KeyEvent), Paste(String), Resize(u16, u16), Msg(M) }
 pub enum Cmd<M> { None, Quit, Batch(Vec<Cmd<M>>),
                   After(Duration, M),                               // timer, on the platform clock
-                  Task(Box<dyn FnOnce() -> M + Send>) }             // blocking work, off the UI thread
+                  Task(Box<dyn FnOnce() -> M + Send>),              // blocking work, off the UI thread
+                  Serial(Box<dyn FnOnce() -> M + Send>) }           // the same, one at a time, in order
 pub trait App: 'static {
     type Msg: Send + 'static;
     fn update(&mut self, event: Event<Self::Msg>) -> Cmd<Self::Msg>;
@@ -192,6 +193,10 @@ pub fn init(clock: impl Clock, kv: impl Kv) -> impl App
   on exit and on panic. `sim`: scripted events, tasks run inline, timers advance `SimClock`, and
   the final `Buffer` is asserted as text. The same event script always gives the same screen, so
   UI tests are deterministic and need no terminal.
+- **The first event is `Resize`** with the current size, right after `start` and before any
+  task result, on every backend: an app never has to guess its size.
+- **`Serial` tasks** run one at a time in the order asked, on a thread of their own; plain
+  `Task`s keep running alongside. For effects that must not overlap (one device, one session).
 - **`start`** returns the first commands (the todo app loads its list as a task), so the first
   frame can say "loading…" instead of blocking.
 - **Logging** goes to a file the wiring picks: stderr would draw over the screen.
@@ -205,9 +210,10 @@ pub fn init(clock: impl Clock, kv: impl Kv) -> impl App
   allowlist makes every one a reviewed choice.
 - **Capabilities in order of need.** First increment: `Clock`, `Random`, `Kv`. For the migrations:
   - `Http` and `Discovery`: built, see below.
-  - `Dir`: a directory handle the app can't escape (cap-std style), for the book folder or a
-    mounted reader. The `powerbox` shape for a terminal: the path comes from config or arguments.
-  - `OpenUrl` and a loopback callback for OAuth logins.
+  - `Dir`: built (`caps/dir`, `caps/dir-native` on cap-std, `SimDir`). Read-only; writing will be
+    a separate capability so `init` shows which apps change files. The powerbox shape for a
+    terminal: the wiring picks the tree, from arguments or config.
+  - `Authorize` (OAuth login in the browser, loopback redirect): built, in `caps/net`.
 
 ## Network capabilities
 `caps/net` (traits and scopes), `caps/net-native`, and sim versions in `caps/sim`. Separate from
@@ -238,6 +244,11 @@ let discovery = NativeDiscovery::new(Targets::new(["urn:schemas-upnp-org:device:
 - Native: ureq with rustls (ring) and the bundled Mozilla roots. Verified against the internet:
   real HTTPS works, an expired certificate is refused (`--ignored` test).
 - Blocking by design: apps call them from a `Cmd::Task`.
+- **`Authorize`**: the OAuth flow for native apps (RFC 8252). The app builds the provider's URL
+  (with `state`, PKCE) and checks what comes back; the capability opens the URL only if it's in
+  its scope (`https://accounts.spotify.com`), so an app can't use the browser to reach anywhere
+  else, and listens on `127.0.0.1:<port>` only while waiting. Native: `xdg-open`/`open` with all
+  output discarded (the terminal is the app's), or `.without_browser()`.
 - Open for `sonos-tui`: the music-service endpoints (SMAPI) come from Sonos at run time, so
   they can't be listed in advance. Options: a subdomain scope per known service, or a scope
   that grows only with origins the speaker reported (needs a design).
@@ -364,6 +375,9 @@ debugger comfort.
 - **`cargo ambit` (check + init): works**, here and in a throwaway project that depends on ambit
   from GitHub (init, allowlist, cackle, check passes). Bypass attempts against it rejected: an
   app's own permissive `clippy.toml`; `#![forbid]` removed + `#[allow]` (E0453).
+- **The `sonos-tui` gaps, closed** (see ADOPTING.md): initial `Resize`, `Cmd::Serial`, `Dir` on
+  cap-std (conformance on native and sim; escapes through symlinks are `Denied`), `Authorize`
+  (loopback flow tested with a fake browser), `MemKv` in `caps/std`.
 - **Network capabilities: built, not yet used by an app.** `Http`, `Discovery`, scopes; native
   (ureq + rustls, UDP) and sim. 7 scope tests, 4 native HTTP tests against a local server, 4 sim
   tests, SSDP answer parsing. Cackle permissions for the TLS stack (ring's C build, unsafe in
@@ -392,10 +406,10 @@ debugger comfort.
    agent identity to push under, and whether to enable local write-deny rules.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
-3. Migrate `sonos-tui`: under way on its `ambit` branch (following ADOPTING.md). It brought a
-   local `Dir` and kept OAuth in the wiring; the gaps it found are listed in ADOPTING.md and
-   want decisions here (initial size event, `Dir` upstream, `OpenUrl` + OAuth callback, serial
-   tasks). Then `crossload`. Then `cli`.
+3. Migrate `sonos-tui`: under way on its `ambit` branch. Next there: move to this ambit commit
+   (drop the local `Dir`, the wiring's OAuth listener, the size workaround, the `Mutex`), and
+   replace the cackle `no_auto_detect` exemptions with grants to the crates that need them.
+   Then `crossload` (needs a writing `Dir`). Then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.

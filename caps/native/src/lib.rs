@@ -6,7 +6,7 @@ use std::path::Path;
 use ambit_caps::{Entry, Kv, KvError, Random};
 use redb::{Database, TableDefinition};
 
-pub use ambit_caps_std::StdClock;
+pub use ambit_caps_std::{MemKv, StdClock};
 
 /// The OS CSPRNG.
 pub struct OsRandom;

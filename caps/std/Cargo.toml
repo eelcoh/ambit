@@ -7,3 +7,6 @@ publish.workspace = true
 
 [dependencies]
 ambit-caps.workspace = true
+
+[dev-dependencies]
+ambit-caps-conformance.workspace = true

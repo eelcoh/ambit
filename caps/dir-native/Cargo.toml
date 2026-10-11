@@ -1,0 +1,13 @@
+[package]
+name = "ambit-caps-dir-native"
+description = "Dir on Linux/Mac via cap-std: every open is relative to the tree, with no way out. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps-dir.workspace = true
+cap-std.workspace = true
+
+[dev-dependencies]
+ambit-caps-conformance.workspace = true

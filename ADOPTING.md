@@ -132,25 +132,23 @@ no `std::fs`), and a separate `-native` crate the wiring depends on. sonos-tui's
 `allowed-deps.txt`; the native one gets its cackle entry (`fs`).
 
 ## Gaps found by the sonos-tui migration
-To decide in ambit (DESIGN.md):
-- **No initial size.** An app learns the terminal size only from `Event::Resize`, which native
-  doesn't send at start. An app that pages by screen height has nothing to go on before the
-  first resize; sonos-tui records the page size in a `Cell` from `view`. Proposal: the
-  platform sends `Resize` before the first event, on native and sim.
-- **`Dir`**: needed, as DESIGN.md expected; a working shape is in sonos-tui's `caps/dir`.
-- **OAuth**: `OpenUrl` and a loopback callback. For now the wiring prints the URL and listens
-  on `127.0.0.1:8989`; the app part is plain functions over `Random`, `Kv`, `Http`, `Clock`.
-- **Endpoints known only at run time** (SMAPI): sonos-tui lists the one it can use
-  (`https://music.googleapis.com`) and lets everything else fail as `Denied`. Good enough while
-  the list is short.
-- **Serial effects**: more apps will want "one at a time". A `Mutex` works, but a platform-level
-  lane (tasks that run in submission order) would make the ordering part of the contract
-  instead of each app's.
-- **A memory `Kv` outside sim**: demo wiring uses `ambit_caps_sim::MemKv` in a production binary.
-  A `MemKv` in `caps/std` would be cleaner.
-- **Weight.** Beyond ratatui, sonos-tui's app tree adds lofty (with flate2 and zlib-rs for
-  compressed tags), sha2, serde, roxmltree and anyhow: 77 crates. The allowlist makes that
-  visible; it doesn't make it small.
+Resolved in ambit, as follows:
+- **Initial size**: the first event is always `Event::Resize` with the current size, right after
+  `start` and before any task result, on native and sim. Drop size workarounds (a `Cell`
+  written from `view`).
+- **`Dir`**: `ambit-caps-dir` (read-only: `metadata`, `open`, `list`; `RelPath` can't climb out),
+  `ambit-caps-dir-native` (cap-std: paths are resolved inside the tree, symlinks leading out are
+  `Denied`, no check-then-open gap), `ambit_caps_sim::SimDir` for tests. Writing will be a
+  separate capability.
+- **OAuth**: `Authorize` in `ambit-caps-net`: opens a scoped URL in the browser and returns the
+  loopback redirect's query (`NativeAuthorize::new(scope, port)`, `.without_browser()` for
+  remote sessions; `SimAuthorize` echoes `state`). The app builds the URL and checks `state`;
+  no listener in the wiring.
+- **Serial effects**: `Cmd::Serial(task)` / `Cmd::serial(..)`: run one at a time, in the order
+  asked, still off the UI thread. Replaces a `Mutex` around the backend.
+- **A memory `Kv` outside sim**: `ambit_caps_std::MemKv` (re-exported by the native backends).
+- Still open: **endpoints known only at run time** (SMAPI): list the ones you use; the rest
+  fail as `Denied`. **Weight**: the allowlist makes it visible, not small.
 
 ## Protecting the human-owned files
 CODEOWNERS only counts with branch protection on `main` ("Require review from Code Owners"),

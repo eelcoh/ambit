@@ -1,7 +1,8 @@
 //! Simulation backend for the tui platform. A test scripts events and reads the screen as text.
 //!
-//! Deterministic: tasks run inline, in the order they were asked for; timers fire only when the
-//! test advances the `SimClock`, in deadline order. The same script always gives the same screen.
+//! Deterministic: tasks (`Task` and `Serial`) run inline, in the order they were asked for; timers
+//! fire only when the test advances the `SimClock`, in deadline order. The first event is
+//! `Resize` with the sim's size, as on a terminal. The same script always gives the same screen.
 #![forbid(unsafe_code)]
 
 use std::collections::VecDeque;
@@ -35,7 +36,10 @@ impl<A: App> Sim<A> {
             next_timer: 0,
             quit: false,
         };
+        // As on a terminal: the size is the first event, before any result of `start`'s tasks.
+        let resized = sim.app.update(Event::Resize(width, height));
         sim.run(start);
+        sim.run(resized);
         sim
     }
 
@@ -105,7 +109,7 @@ impl<A: App> Sim<A> {
                     self.timers.push((self.now + delay, self.next_timer, msg));
                     self.next_timer += 1;
                 }
-                Cmd::Task(work) => {
+                Cmd::Task(work) | Cmd::Serial(work) => {
                     if self.quit {
                         continue;
                     }
