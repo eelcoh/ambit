@@ -124,6 +124,20 @@ In this order; each step leaves something that builds.
    reports a build script's API use under the plain crate name; the path in the report
    (`.../build.rs`) says it belongs in `build.allow_apis`, not `allow_apis`.
 
+   Two things to expect when copying ambit's `cackle.toml` (found moving sonos-tui to 81cad7b):
+   - **Run-time grants are missing.** No binary in ambit wires `NativeDir`, `NativeAuthorize` or
+     `NativeHttp`, so ambit's file grants their APIs only to tests (`test.allow_apis`,
+     `from.test.allow_apis`). A project whose wiring uses them needs `fs` for
+     `ambit-caps-dir-native`, `cap-std` and `cap-primitives`; `process` for
+     `ambit-caps-net-native` (the browser for `Authorize`); `net` and `env` for `ureq` (`env`
+     is its proxy-from-environment code, which `NativeHttp` switches off).
+   - **Entries for crates you don't build fail the check.** With `--fail-on-warnings`, cackle
+     rejects config for packages outside the tree (`cargo-ambit`, `run-todo`,
+     `ambit-server-std`, ...) and grants nothing uses. Delete exactly what it names.
+   Don't silence a name clash with `[api.*] no_auto_detect`: it switches detection off for that
+   crate everywhere. Ambit's `[api.fs]` / `[api.process]` already include `rustix::fs` and
+   `rustix::process`.
+
 ## When ambit lacks a capability
 Write it in the project as a human-owned crate under `caps/`, in ambit's shape, so it can move
 upstream unchanged: a trait crate the app depends on (no implementation, so the app's tree has
