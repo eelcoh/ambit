@@ -210,9 +210,13 @@ pub fn init(clock: impl Clock, kv: impl Kv) -> impl App
   allowlist makes every one a reviewed choice.
 - **Capabilities in order of need.** First increment: `Clock`, `Random`, `Kv`. For the migrations:
   - `Http` and `Discovery`: built, see below.
-  - `Dir`: built (`caps/dir`, `caps/dir-native` on cap-std, `SimDir`). Read-only; writing will be
-    a separate capability so `init` shows which apps change files. The powerbox shape for a
-    terminal: the wiring picks the tree, from arguments or config.
+  - `Dir`: built (`caps/dir`, `caps/dir-native` on cap-std, `SimDir`), in three levels so `init`
+    shows what an app can do to the files it gets: `Dir` reads; `DirWrite` also adds files and
+    directories but never changes or removes what's there (a book copied to a card can't
+    overwrite another); `DirModify` also replaces and removes files. New files are written aside,
+    flushed, read back and compared, then renamed into place without replacing (atomic, also on
+    FAT and APFS). The powerbox shape for a terminal: the wiring picks the tree, from arguments
+    or config.
   - `Authorize` (OAuth login in the browser, loopback redirect): built, in `caps/net`.
 
 ## Network capabilities
@@ -406,10 +410,9 @@ debugger comfort.
    agent identity to push under, and whether to enable local write-deny rules.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
-3. Migrate `sonos-tui`: under way on its `ambit` branch. Next there: move to this ambit commit
-   (drop the local `Dir`, the wiring's OAuth listener, the size workaround, the `Mutex`), and
-   replace the cackle `no_auto_detect` exemptions with grants to the crates that need them.
-   Then `crossload` (needs a writing `Dir`). Then `cli`.
+3. Migrations. `sonos-tui`: done on its `ambit` branch, runs against real speakers, its
+   allowlist and permissions approved. `crossload`: the writing `Dir` is built; next a WebSocket
+   capability for the reader's upload protocol, then the move itself. Then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.

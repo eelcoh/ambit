@@ -10,7 +10,8 @@ use std::net::IpAddr;
 
 use ambit_caps::{Clock, Entry, Kv, KvError, Random};
 use ambit_caps_dir::{
-    Dir, DirError, DirErrorKind, Entry as DirEntry, File as DirFile, Meta, RelPath,
+    Dir, DirError, DirErrorKind, DirModify, DirWrite, Entry as DirEntry, File as DirFile, Meta,
+    RelPath,
 };
 use ambit_caps_net::{
     AuthError, AuthErrorKind, Authorize, Device, Discovery, DiscoveryError, Http, HttpError,
@@ -298,6 +299,8 @@ pub struct SimDir {
 struct SimTree {
     files: BTreeMap<Vec<String>, Vec<u8>>,
     dirs: BTreeSet<Vec<String>>,
+    /// Free bytes; `None` is unlimited.
+    space: Option<u64>,
 }
 
 impl SimDir {
@@ -332,6 +335,18 @@ impl SimDir {
         self
     }
 
+    /// Free space from now on: writes that don't fit fail with `Full`, and writes use it up.
+    pub fn space(&self, bytes: u64) -> &Self {
+        lock(&self.tree).space = Some(bytes);
+        self
+    }
+
+    /// The contents of the file at `path`, if there is one: what the app wrote.
+    pub fn read(&self, path: &str) -> Option<Vec<u8>> {
+        let parts = RelPath::parse(path).expect("valid sim path");
+        lock(&self.tree).files.get(parts.parts()).cloned()
+    }
+
     /// Removes the file or directory at `path`, and everything under it.
     pub fn remove(&self, path: &str) {
         let parts = RelPath::parse(path)
@@ -351,6 +366,44 @@ impl SimTree {
 
     fn not_found(path: &RelPath) -> DirError {
         DirError::new(DirErrorKind::NotFound, path.to_string())
+    }
+
+    /// Checks what writing `contents` to `path` needs: an existing parent, no directory in the
+    /// way, and room for any growth.
+    fn check_write(&self, path: &RelPath, contents: &[u8]) -> Result<(), DirError> {
+        let (parent, _) = path
+            .split_last()
+            .ok_or_else(|| DirError::new(DirErrorKind::Invalid, "the tree itself is not a file"))?;
+        if !self.is_dir(parent.parts()) {
+            let kind = if self.files.contains_key(parent.parts()) {
+                DirErrorKind::WrongKind
+            } else {
+                DirErrorKind::NotFound
+            };
+            return Err(DirError::new(kind, parent.to_string()));
+        }
+        if self.is_dir(path.parts()) {
+            return Err(DirError::new(
+                DirErrorKind::WrongKind,
+                format!("{path}: is a directory"),
+            ));
+        }
+        let old = self.files.get(path.parts()).map_or(0, Vec::len);
+        let growth = contents.len().saturating_sub(old) as u64;
+        if self.space.is_some_and(|free| growth > free) {
+            return Err(DirError::new(DirErrorKind::Full, path.to_string()));
+        }
+        Ok(())
+    }
+
+    fn write(&mut self, path: &RelPath, contents: &[u8]) {
+        let old = self
+            .files
+            .insert(path.parts().to_vec(), contents.to_vec())
+            .map_or(0, |f| f.len());
+        if let Some(free) = &mut self.space {
+            *free = (*free + old as u64).saturating_sub(contents.len() as u64);
+        }
     }
 }
 
@@ -416,6 +469,76 @@ impl Dir for SimDir {
             .collect();
         entries.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(entries)
+    }
+}
+
+impl DirWrite for SimDir {
+    fn create_dir(&self, path: &RelPath) -> Result<(), DirError> {
+        let mut tree = lock(&self.tree);
+        let parts = path.parts();
+        for i in 1..=parts.len() {
+            if tree.files.contains_key(&parts[..i]) {
+                return Err(DirError::new(
+                    DirErrorKind::WrongKind,
+                    format!("{}: is a file", parts[..i].join("/")),
+                ));
+            }
+        }
+        for i in 1..=parts.len() {
+            tree.dirs.insert(parts[..i].to_vec());
+        }
+        Ok(())
+    }
+
+    fn create_new(&self, path: &RelPath, contents: &[u8]) -> Result<(), DirError> {
+        let mut tree = lock(&self.tree);
+        if path.is_root() {
+            return Err(DirError::new(
+                DirErrorKind::Invalid,
+                "the tree itself is not a file",
+            ));
+        }
+        if tree.files.contains_key(path.parts()) || tree.is_dir(path.parts()) {
+            return Err(DirError::new(DirErrorKind::Exists, path.to_string()));
+        }
+        tree.check_write(path, contents)?;
+        tree.write(path, contents);
+        Ok(())
+    }
+
+    fn available_space(&self, path: &RelPath) -> Result<u64, DirError> {
+        let tree = lock(&self.tree);
+        if !tree.is_dir(path.parts()) {
+            return Err(SimTree::not_found(path));
+        }
+        Ok(tree.space.unwrap_or(u64::MAX))
+    }
+}
+
+impl DirModify for SimDir {
+    fn replace(&self, path: &RelPath, contents: &[u8]) -> Result<(), DirError> {
+        let mut tree = lock(&self.tree);
+        tree.check_write(path, contents)?;
+        tree.write(path, contents);
+        Ok(())
+    }
+
+    fn remove_file(&self, path: &RelPath) -> Result<(), DirError> {
+        let mut tree = lock(&self.tree);
+        if tree.is_dir(path.parts()) {
+            return Err(DirError::new(
+                DirErrorKind::WrongKind,
+                format!("{path}: is a directory"),
+            ));
+        }
+        let old = tree
+            .files
+            .remove(path.parts())
+            .ok_or_else(|| SimTree::not_found(path))?;
+        if let Some(free) = &mut tree.space {
+            *free += old.len() as u64;
+        }
+        Ok(())
     }
 }
 

@@ -37,6 +37,7 @@ dependencies = [
  "ambit-caps-conformance",
  "ambit-caps-dir",
  "cap-std",
+ "rustix",
 ]
 
 [[package]]

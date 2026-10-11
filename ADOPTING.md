@@ -150,10 +150,13 @@ Resolved in ambit, as follows:
 - **Initial size**: the first event is always `Event::Resize` with the current size, right after
   `start` and before any task result, on native and sim. Drop size workarounds (a `Cell`
   written from `view`).
-- **`Dir`**: `ambit-caps-dir` (read-only: `metadata`, `open`, `list`; `RelPath` can't climb out),
-  `ambit-caps-dir-native` (cap-std: paths are resolved inside the tree, symlinks leading out are
-  `Denied`, no check-then-open gap), `ambit_caps_sim::SimDir` for tests. Writing will be a
-  separate capability.
+- **`Dir`**: `ambit-caps-dir` (`Dir` reads: `metadata`, `open`, `list`; `RelPath` can't climb
+  out. `DirWrite` adds: `create_dir`, `create_new`, which never replaces anything, and
+  `available_space`. `DirModify` changes: `replace`, `remove_file`). Ask for the lowest level
+  the app needs. `ambit-caps-dir-native` (cap-std: paths are resolved inside the tree, symlinks
+  leading out are `Denied`, no check-then-open gap; new files are verified and renamed into
+  place atomically), `ambit_caps_sim::SimDir` for tests (`space` to make a volume fill up,
+  `read` to see what the app wrote).
 - **OAuth**: `Authorize` in `ambit-caps-net`: opens a scoped URL in the browser and returns the
   loopback redirect's query (`NativeAuthorize::new(scope, port)`, `.without_browser()` for
   remote sessions; `SimAuthorize` echoes `state`). The app builds the URL and checks `state`;
