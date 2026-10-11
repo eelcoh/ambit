@@ -6,6 +6,5 @@
 # Cargo.lock and the app's allowed-deps.txt, which stay human-owned.
 /apps/
 
-# ...except the apps' enforcement files.
-/apps/clippy.toml           @eelcoh
+# ...except each app's dependency allowlist. The app rules live in tools/cargo-ambit.
 /apps/*/allowed-deps.txt    @eelcoh

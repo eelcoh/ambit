@@ -329,6 +329,41 @@ from.test.allow_apis = [
     "net",
 ]
 
+[pkg.serde_derive]
+allow_proc_macro = true
+
+[pkg.serde_core]
+build.allow_apis = [
+    "env",
+    "fs",
+    "process",
+]
+allow_unsafe = true
+
+[pkg.zmij]
+build.allow_apis = [
+    "env",
+    "process",
+    "terminate",
+]
+allow_unsafe = true
+
+[pkg.serde_json]
+build.allow_apis = [
+    "env",
+]
+allow_unsafe = true
+
+[pkg.memchr]
+allow_unsafe = true
+
+[pkg.cargo-ambit]
+allow_apis = [
+    "env",
+    "fs",
+    "process",
+]
+
 [api.net]
 include = [
     "mio::net",

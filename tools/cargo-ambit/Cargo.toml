@@ -1,0 +1,9 @@
+[package]
+name = "cargo-ambit"
+description = "The ambit checks for a workspace: app lints, app dependencies, cackle. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true

@@ -1,6 +1,6 @@
-# Human-owned. The app has no ambient authority: every effect comes through the capabilities
-# handed to init(). Applies to every crate under apps/. Enforced by the -F flags in
-# scripts/check.sh, so an app can't #[allow] them.
+# The disallowed APIs for every app crate (under apps/). Not named clippy.toml, so it applies only
+# where cargo-ambit hands it to clippy (as clippy.toml in CLIPPY_CONF_DIR): built into the tool,
+# so a project using ambit has no copy an agent could edit. Human-owned.
 disallowed-methods = [
     { path = "std::time::SystemTime::now", reason = "use the Clock capability" },
     { path = "std::time::Instant::now", reason = "use the Clock capability" },

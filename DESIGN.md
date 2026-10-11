@@ -254,7 +254,7 @@ caps/conformance/          tests every implementation must pass        (human-ow
 platforms/<p>/api/         entry shape: the contract                   (human-owned)
 platforms/<p>/<backend>/   event loop, IO; re-exports the caps it runs (human-owned)
 apps/<name>/               all logic, no ambient authority             (agent-owned)
-apps/clippy.toml           disallowed APIs, for every app              (human-owned)
+tools/cargo-ambit/         the checks, for this repo and any other     (human-owned)
 spec/                      properties and acceptance tests on the apps (human-owned)
 run-<name>/                tiny binary crates: wiring only             (human-owned)
 ```
@@ -264,17 +264,20 @@ One binary crate per backend rather than Cargo features: features unify badly ac
 and backends need different target-specific dependencies.
 
 ## Enforcement
-Applies to every crate under `apps/`.
-1. **Lints** (`scripts/check.sh`): `apps/clippy.toml` `disallowed-methods`/`disallowed-types`
-   (std::fs, std::net, std::process, std::env, SystemTime::now, thread::spawn, ...), found by
-   clippy for every app. The forbids are passed **on the clippy command line** (`-F`), not only
+Applies to every crate under `apps/`. All of it is **`cargo ambit check`** (`tools/cargo-ambit`):
+this repo runs it through `scripts/check.sh`, other projects install it at the same ambit
+commit as their `Cargo.lock` (see ADOPTING.md).
+1. **Lints**: `disallowed-methods`/`disallowed-types` (std::fs, std::net, std::process, std::env,
+   SystemTime::now, thread::spawn, ...) from `tools/cargo-ambit/app-rules.toml`, **built into the
+   tool** and handed to clippy through `CLIPPY_CONF_DIR`: a project has no copy an agent could
+   edit, and an app's own `clippy.toml` is ignored (verified). The forbids are passed **on the clippy command line** (`-F`), not only
    via `#![forbid]` in the app's `src/lib.rs`: that file is agent-owned, and deleting the attribute plus an `#[allow]` silenced clippy
    completely. A command-line forbid can't be relaxed from source (E0453).
-   **App checks** (`scripts/check-app.py`, via `cargo metadata`): an app has no build script and
+   **App checks** (via `cargo metadata`): an app has no build script and
    no proc-macro target; every crate reachable over normal and build edges is in its
    `allowed-deps.txt` (stale entries fail too); a directory under `apps/` that isn't a workspace
-   member fails, so an app can't escape the checks; every dependency comes from crates.io or the
-   workspace, so an allowlisted name from git or a path is rejected; `Cargo.lock` must match.
+   member fails, so an app can't escape the checks; every dependency comes from crates.io,
+   ambit's repository or the workspace, so an allowlisted name from elsewhere is rejected; `Cargo.lock` must match.
 2. **cackle** (`cargo acl`, `cackle.toml`): per-crate API permissions on compiled code, for every
    crate including dependencies. The apps have no entry: no restricted API, no unsafe. It sees
    code that ends up in a binary; unreachable code doesn't, and the lints catch that anyway. Build scripts
@@ -285,8 +288,8 @@ Applies to every crate under `apps/`.
 Levels 1 and 2 apply on **every** backend, native included, so dev can't quietly use what prod
 doesn't allow.
 
-**Human review surface** = everything except `apps/` (where `clippy.toml` and each
-`allowed-deps.txt` stay human-owned): `caps/`, platforms, conformance, `spec/`, `run-*`, `scripts/`,
+**Human review surface** = everything except `apps/` (where each `allowed-deps.txt` stays
+human-owned): `caps/`, platforms, conformance, `spec/`, `run-*`, `scripts/`,
 `cackle.toml`, `Cargo.toml`/`Cargo.lock`, `rust-toolchain.toml`, `.github/`. Listed in
 `.github/CODEOWNERS`. Protection:
 - **Merge gate**: CODEOWNERS + branch protection ("require review from Code Owners"), plus CI.
@@ -349,7 +352,7 @@ debugger comfort.
   - Native: redb for `Kv`, `getrandom`. Handler panics become 500.
   - Clippy only runs in `cargo clippy`, not `cargo build`: CI must run `scripts/check.sh`.
 - **Enforcement levels 1 and 2 in CI** (`.github/workflows/ci.yml`): `check.sh` (fmt, clippy,
-  app lints with command-line forbids, tests, `check-app.py`, cackle), and acceptance on native
+  app lints with command-line forbids, tests, the app checks, cackle), and acceptance on native
   and hermit (KVM on GitHub runners, Hermit std from hermit-os/rust-std-hermit). Verified bypass
   attempts, all rejected: `#![forbid]` removed + `#[allow]`; a `build.rs`; allowlisted name
   from a path; `TcpStream::connect` in an app (cackle: "uses disallowed API `net`").
@@ -358,6 +361,9 @@ debugger comfort.
   text, 4 sim ordering tests. Native checked in a pseudo-terminal: items persist across runs, and
   raw mode, alternate screen, bracketed paste and the cursor are restored on quit. The same
   bypass checks hold for `todo` (E0453; cackle "uses disallowed API `net`").
+- **`cargo ambit` (check + init): works**, here and in a throwaway project that depends on ambit
+  from GitHub (init, allowlist, cackle, check passes). Bypass attempts against it rejected: an
+  app's own permissive `clippy.toml`; `#![forbid]` removed + `#[allow]` (E0453).
 - **Network capabilities: built, not yet used by an app.** `Http`, `Discovery`, scopes; native
   (ureq + rustls, UDP) and sim. 7 scope tests, 4 native HTTP tests against a local server, 4 sim
   tests, SSDP answer parsing. Cackle permissions for the TLS stack (ring's C build, unsafe in
@@ -386,8 +392,7 @@ debugger comfort.
    agent identity to push under, and whether to enable local write-deny rules.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
-3. Package the enforcement (checks, allowlists, cackle, CODEOWNERS) so another repo can adopt
-   it; then migrate `sonos-tui` (needs: `OpenUrl` + OAuth callback, a scope for music-service
+3. Migrate `sonos-tui` (following ADOPTING.md) (needs: `OpenUrl` + OAuth callback, a scope for music-service
    endpoints); then `Dir` and `crossload`. Then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;

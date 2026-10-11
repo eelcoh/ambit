@@ -1,0 +1,14 @@
+# Level 2 enforcement: which crate may use which API, checked by cackle (`cargo acl`) on the
+# compiled code of every crate, dependencies included. Human-owned.
+#
+# - Apps (under apps/) get no [pkg.*] entry: no restricted API, and no opting out of memory safety.
+#   Their effects go through the capabilities handed to init().
+# - Run `cargo acl` once to review and accept what the platform and its dependencies need.
+#   Build scripts and tests run in a Bubblewrap sandbox.
+
+[common]
+version = 2
+import_std = ["fs", "net", "process", "env", "terminate"]
+
+[sandbox]
+kind = "Bubblewrap"
