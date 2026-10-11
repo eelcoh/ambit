@@ -167,6 +167,70 @@ Resolved in ambit, as follows:
 - Still open: **endpoints known only at run time** (SMAPI): list the ones you use; the rest
   fail as `Denied`. **Weight**: the allowlist makes it visible, not small.
 
+## Gaps found by the crossload migration
+Found moving `crossload` (its `ambit` branch) to 300f401: a terminal app with book folders, a
+Kobo and a reader's card that come and go, a reader over Wi-Fi, OPDS catalogues, SQLite and
+libgourou (C++). Open in ambit; what crossload does about each for now:
+- **Removable media.** `NativeDir::open` opens the tree once, at start: a Kobo or card plugged
+  in later is never seen, and one unplugged leaves a stale handle. crossload's wiring has a
+  `Mount` (`run-crossload/src/mount.rs`) that opens the path again on every call, so the tree is
+  whatever is mounted there now, with cap-std's rules. A `NativeDir::mount(path)` would do.
+- **Choosing folders at run time.** The settings panel can name new folders and devices, which
+  the app cannot open (the powerbox question, for a terminal). crossload saves the settings,
+  sets an `Arc<AtomicBool>` it got in `Config`, and quits; the wiring loops, reads the settings
+  again and starts the app with new capabilities. Needs: `run` returning something from the
+  app (e.g. `App::finish(self) -> T`), or a terminal powerbox. Related: the panel used to mark
+  typed paths "folder found" / "Kobo found"; now it can only say what the wiring opened at
+  launch.
+- **`run` can't be called twice in one process.** The native backend's input thread stays blocked
+  in `event::read()` after `run` returns, and swallows the next key of a second `run`. crossload
+  restarts by re-executing itself instead (`exec`, with the arguments that don't override the
+  saved settings). Stopping the input thread on return (poll with a timeout and a stop flag)
+  would allow a loop in the wiring.
+- **Progress from a running task.** `Cmd::task` returns one message. The old worker reported
+  phases (reading, preparing, uploading, verifying) of a copy that can take minutes over Wi-Fi.
+  Chaining one task per phase would work but splits one transfer function in four; crossload
+  names each book as it starts instead. A task with a progress sender (`Cmd::stream`) would
+  fit.
+- **`SimDir` has no modification times.** Caches keyed on (size, mtime), as crossload's identity
+  cache is, can't be tested on the sim: those tests use `NativeDir` on a temp directory. A
+  `modified` driven by `SimClock`, and a `touch`, would do. `SimDir` also has no symlinks, so
+  "a link that leads off the card is refused" is a native test too.
+- **Local network and names.** `Origin::lan` covers IP addresses only, so a reader known as
+  `crosspoint.local` gets an exact-origin scope from the wiring. A name typed into the settings
+  at run time is outside the session's scope until it restarts (the app says so). Loopback is
+  outside `lan` too, so a CLI end-to-end test can't stand a local mock server in for the reader;
+  that test moved to the sims.
+- **Endpoints known only at run time**, again (as SMAPI for sonos): OPDS catalogues redirect to
+  CDNs and the user types catalogue addresses. The CLI wiring grants the given URL's origin and
+  the subdomains of its domain; a redirect elsewhere fails as `Denied` (the app follows
+  redirects itself, so each hop is checked).
+- **No append.** `DirModify::replace` rewrites a file whole; crossload's JSONL record of copies
+  (bounded at 5000 lines) is rewritten on every copy. Fine at that size, not for a log.
+- **One body in memory.** `Http` returns the whole body; reading a 128 MiB book back from the
+  reader to verify it holds it in memory (as before, but now not avoidable).
+- **The CLI has no platform yet.** crossload's command line moved into the wiring (human-owned)
+  and calls the app's functions with native capabilities built there: about 1700 lines of
+  argument handling and printing on the human review surface until there is a cli platform.
+- **Dependencies with their own authority.** `lopdf` (PDF reading) always depends on its
+  encryption stack, including `rand`/`getrandom` (OS randomness), though crossload never
+  encrypts a PDF. The allowlist and cackle show it; nothing in ambit can say "linked but
+  unused".
+
+Notes for adopters with C/C++ dependencies:
+- Put each in a capability crate under `caps/` with a trait crate (and a sim) the app depends
+  on; the `unsafe`, the build script and the native libraries stay in the `-native` crate. For
+  crossload that was the Kobo database (rusqlite with bundled SQLite, plus the decryption that
+  needs it) and ADEPT fulfilment (libgourou, curl, OpenSSL). Keep the interfaces narrow: the
+  Kobo one is "books, shelves, annotations, encrypted members, decrypt"; ADEPT is "status,
+  import activation, ACSM in / book out".
+- `cargo acl -n` stops at the first problem, so a tree with OpenSSL, curl, SQLite and libgourou
+  takes many runs; crossload scripted the loop and then reviewed the drafted grants. The
+  build-script grants (`build.allow_apis`, `build.allow_build_instructions`) are most of them.
+- Vendored OpenSSL (`openssl-src`) needs Perl modules a minimal build container may lack;
+  `OPENSSL_DIR` pointing at a prebuilt static OpenSSL (with `OPENSSL_NO_VENDOR=1`) works for
+  local checks.
+
 ## Protecting the human-owned files
 CODEOWNERS only counts with branch protection on `main` ("Require review from Code Owners"),
 and only if the agent pushes under its own GitHub identity: an agent using your credentials is
