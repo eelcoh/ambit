@@ -21,16 +21,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambit-server-hermit"
+version = "0.1.0"
+dependencies = [
+ "ambit-caps",
+ "ambit-server-conformance",
+ "ambit-server-std",
+ "getrandom",
+ "hermit",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ambit-server-native"
 version = "0.1.0"
 dependencies = [
  "ambit-caps",
- "ambit-server",
  "ambit-server-conformance",
+ "ambit-server-std",
  "getrandom",
  "redb",
- "tiny_http",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -44,6 +54,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambit-server-std"
+version = "0.1.0"
+dependencies = [
+ "ambit-caps",
+ "ambit-server",
+ "httparse",
+ "tracing",
+]
+
+[[package]]
 name = "app"
 version = "0.1.0"
 dependencies = [
@@ -54,16 +74,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "ascii"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d92bec98840b8f03a5ff5413de5293bfcd8bf96467cf5452609f939ec6f5de16"
-
-[[package]]
 name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
+
+[[package]]
+name = "cc"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50a649af8a827553c29fb0cb4bd4a6f1a0dd695bd3232b9bc98bd9c8a3ffbb8b"
+dependencies = [
+ "find-msvc-tools",
+ "shlex",
+]
 
 [[package]]
 name = "cfg-if"
@@ -72,10 +96,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
-name = "chunked_transfer"
-version = "1.5.0"
+name = "find-msvc-tools"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e4de3bc4ea267985becf712dc6d9eed8b04c953b3fcfb339ebc87acd9804901"
+checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
 name = "getrandom"
@@ -90,6 +114,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermit"
+version = "0.13.2"
+source = "git+https://github.com/hermit-os/hermit-rs.git?tag=hermit-0.13.2#0e68850e7b848656f8704b6c1fdc3a09685cb4de"
+dependencies = [
+ "cc",
+ "home",
+]
+
+[[package]]
+name = "home"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
 name = "http"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -100,10 +142,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "httpdate"
-version = "1.0.3"
+name = "httparse"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
 name = "itoa"
@@ -184,6 +226,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "run-hermit"
+version = "0.1.0"
+dependencies = [
+ "ambit-server-hermit",
+ "app",
+ "hermit",
+]
+
+[[package]]
 name = "run-native"
 version = "0.1.0"
 dependencies = [
@@ -199,6 +250,12 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
+
+[[package]]
+name = "shlex"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "smallvec"
@@ -234,18 +291,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "tiny_http"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "389915df6413a2e74fb181895f933386023c71110878cd0825588928e64cdc82"
-dependencies = [
- "ascii",
- "chunked_transfer",
- "httpdate",
- "log",
 ]
 
 [[package]]

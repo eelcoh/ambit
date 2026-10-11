@@ -13,8 +13,9 @@ distrobox enter build-machine -- bash -lc \
   "export PATH=\$HOME/.cargo/bin:\$PATH; cd '$PWD' && cargo build --release --target x86_64-unknown-hermit"
 
 # -cpu host exposes features the kernel does not handle yet; use Hermit's documented CPU model.
+# rdseed: without it the kernel falls back to predictable randomness (see DESIGN.md).
 exec qemu-system-x86_64 -enable-kvm \
-  -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
+  -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdseed,rdtscp,xsave,xsaveopt \
   -smp 1 -m 64M -display none -serial stdio \
   -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
   -kernel "$LOADER" -initrd target/x86_64-unknown-hermit/release/hermit-httpd \

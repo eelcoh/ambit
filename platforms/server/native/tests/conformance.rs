@@ -1,8 +1,8 @@
-use ambit_server_native::{NativeClock, NativeKv, OsRandom};
+use ambit_server_native::{NativeKv, OsRandom, StdClock};
 
 #[test]
 fn clock() {
-    ambit_server_conformance::clock(&NativeClock::new());
+    ambit_server_conformance::clock(&StdClock::new());
 }
 
 #[test]

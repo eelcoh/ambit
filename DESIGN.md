@@ -145,9 +145,18 @@ server_native::serve(app::init(NativeClock::new(), OsRandom, NativeKv::open(..)?
 - **Logging: the `tracing` facade**, an explicit exception to "no ambient authority": write-only
   output to an operator-controlled sink. The platform owns the subscriber; tests capture with a
   scoped subscriber.
-- `Random` must be a CSPRNG on real backends. **Open on hermit:** the spike logs
-  `Unable to read entropy! Fallback to a naive implementation!` despite `rdrand` in the CPU model.
-- hermit has no `Kv` until the storage spike; wiring it there is a compile error until then.
+- `Random` must be a CSPRNG on real backends. On hermit: the kernel CSPRNG is ChaCha20 seeded
+  from **RDSEED** (not RDRAND). Without RDSEED it silently falls back to a timestamp-seeded LCG and
+  still reports success. So `HermitRandom::new()` fails closed: it checks CPUID at runtime and the
+  wiring refuses to start. Not `is_x86_feature_detected!`: the hermit target enables `rdseed` as a
+  compile-time feature, so that macro is constant `true`. QEMU needs `rdseed` in `-cpu`.
+- hermit has no durable `Kv` until the storage spike. `EphemeralKv` exists, and wiring it is a
+  visible choice in `run-hermit` to lose data on restart.
+- **The platform bounds resources, not the app.** The server has a fixed worker pool with fixed
+  stacks and a bounded accept queue (503 when full), per-read timeouts and a per-connection
+  deadline, and hard limits on head (16 KiB, 431) and body (1 MiB, 413). Chunked bodies get 501.
+  `tiny_http` spawned a thread per connection without limit, which crashed the 64 MB hermit VM at
+  20 concurrent requests; the replacement is a small server on `httparse` (fewer dependencies too).
 
 ## Workspace shape (sketch)
 ```
@@ -214,8 +223,6 @@ debugger comfort.
   grow the human-owned platform code. Alternative: generic but scoped primitives (`Http` limited to
   a host allowlist, `Kv` limited to a namespace) wrapped into domain capabilities in the wiring, so
   the human reviews scopes, not implementations.
-- How the app declares its capability needs: generic bounds, or an `App` trait with associated
-  capability types. Missing capability on a backend should be a compile error.
 - `gui` toolkit choice.
 - Threat model: a careless agent, or a compromised one (prompt injection via dependencies/docs)?
   Decides how hard levels 1-2 and the protection must be.
@@ -232,9 +239,19 @@ debugger comfort.
     (E0453, conflicts with `forbid`).
   - `app/allowed-deps.txt` covers the full normal tree including proc macros (`tracing-attributes`,
     `syn`, ...), because they run at build time with full authority. Stale entries also fail.
-  - Native: `tiny_http` + thread pool, redb for `Kv`, `getrandom`, 1 MiB body limit (413),
-    handler panics become 500.
+  - Native: redb for `Kv`, `getrandom`. Handler panics become 500.
   - Clippy only runs in `cargo clippy`, not `cargo build`: CI must run `scripts/check.sh`.
+- **hermit backend: works.** `platforms/server/hermit`, `run-hermit`. `platforms/server/std` holds
+  what native and hermit share: the bounded HTTP server and `StdClock`.
+  - Kernel features derived as designed: `tcp` from the backend crate, `acpi`/`pci`/`dhcpv4`/
+    `virtio-net` from the qemu profile in `run-hermit`, nothing else (checked with `cargo tree`).
+  - Example app image: 1.3 MB (0.53 MB gzipped, LTO + strip, `image` profile), 0.25 s to first
+    response.
+  - `scripts/hermit-conformance.sh` runs the conformance suite inside the image under QEMU
+    (Hermit's isa-debug-exit: QEMU status 3 = success, 1 = failure). Without RDSEED it fails with
+    `NoEntropy`, as intended.
+  - `scripts/acceptance.sh native|hermit`: the same black-box HTTP suite passes on both.
+  - 200 concurrent requests against the hermit VM: 187 × 201, 13 × 503, VM stays up.
 
 ## Environment
 - Rust builds run in the distrobox: `distrobox enter build-machine`.
@@ -243,12 +260,11 @@ debugger comfort.
 - QEMU runs on the host; `/dev/kvm` is available.
 
 ## Next steps
-1. hermit backend for `server` (`Clock`, `Random`, serve; blocking as in the spike) and
-   `run-hermit`, with features derived per capability crate. Fix entropy first. Tokio on Hermit
-   (Hermit's forks of `tokio`/`socket2` via `[patch.crates-io]`) only if blocking is too limiting.
-2. Rest of the template: cackle (level 2), protection of the human-owned paths (sandbox/CI),
-   black-box acceptance tests over HTTP against native and hermit, sim failure injection
-   (`Kv` errors).
-3. `tui` platform (terminal + headless), to prove the Elm entry shape.
-4. Later: `cli`; outbound connections + TLS, storage (virtio-fs/block), uhyve/Firecracker for
-   hermit; attack-surface report; capabilities to Landlock/seccomp for native; `gui`.
+1. Rest of the template: cackle (level 2), protection of the human-owned paths (sandbox/CI), CI
+   running `check.sh` + acceptance on both backends, sim failure injection (`Kv` errors).
+2. Report the silent entropy fallback upstream (hermit-os/kernel): returning success with
+   LCG output is a security bug for any Hermit user.
+3. `tui` platform (terminal + headless), to prove the Elm entry shape; then `cli`.
+4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
+   uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
+   `gui`. Tokio on Hermit only if the blocking server turns out too limiting.

@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use ambit_server_native::{Listen, NativeClock, NativeKv, OsRandom};
+use ambit_server_native::{Listen, NativeKv, OsRandom, StdClock};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     ambit_server_native::init_tracing();
@@ -12,13 +12,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ttl: Duration::from_secs(7 * 24 * 3600),
     };
     let kv = NativeKv::open("data/app.redb")?;
-    let app = app::init(NativeClock::new(), OsRandom, kv, config);
+    let app = app::init(StdClock::new(), OsRandom, kv, config);
 
     ambit_server_native::serve(
         app,
         Listen {
             addr: ([127, 0, 0, 1], 8080).into(),
-            threads: 4,
+            threads: 8,
+            queue: 256,
         },
     )?;
     Ok(())

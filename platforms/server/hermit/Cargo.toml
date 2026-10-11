@@ -1,0 +1,24 @@
+[package]
+name = "ambit-server-hermit"
+description = "Hermit unikernel backend for the server platform: acceptance and prod. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps.workspace = true
+ambit-server-std.workspace = true
+getrandom.workspace = true
+tracing-subscriber.workspace = true
+
+# Only what serving needs. NIC driver, DHCP, PCI and ACPI depend on where the image runs:
+# they are the deployment profile, chosen in the run-* crate.
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { workspace = true, features = ["tcp"] }
+
+[dev-dependencies]
+ambit-server-conformance.workspace = true
+
+# Deployment profile for the in-image conformance run: qemu.
+[target.'cfg(target_os = "hermit")'.dev-dependencies]
+hermit = { workspace = true, features = ["acpi", "pci", "dhcpv4", "virtio-net"] }

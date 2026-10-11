@@ -3,12 +3,15 @@ resolver = "3"
 members = [
     "caps",
     "platforms/server/api",
+    "platforms/server/std",
     "platforms/server/native",
+    "platforms/server/hermit",
     "platforms/server/sim",
     "platforms/server/conformance",
     "app",
     "spec",
     "run-native",
+    "run-hermit",
 ]
 exclude = ["spikes"]
 
@@ -20,14 +23,26 @@ publish = false
 [workspace.dependencies]
 ambit-caps = { path = "caps" }
 ambit-server = { path = "platforms/server/api" }
+ambit-server-std = { path = "platforms/server/std" }
 ambit-server-native = { path = "platforms/server/native" }
+ambit-server-hermit = { path = "platforms/server/hermit" }
 ambit-server-sim = { path = "platforms/server/sim" }
 ambit-server-conformance = { path = "platforms/server/conformance" }
 app = { path = "app" }
 
 getrandom = "0.3"
+# Kernel features are added per crate; see DESIGN.md "Hermit: minimal by default".
+hermit = { git = "https://github.com/hermit-os/hermit-rs.git", tag = "hermit-0.13.2", default-features = false }
 http = "1"
+httparse = "1"
 redb = "2"
-tiny_http = "0.12"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+# Unikernel images: small and stripped. Keeps unwinding so handler panics become 500s.
+[profile.image]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
