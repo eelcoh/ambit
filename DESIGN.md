@@ -204,12 +204,47 @@ pub fn init(clock: impl Clock, kv: impl Kv) -> impl App
   macros), against 14 for the server example. Acceptable for native-only terminal apps; the
   allowlist makes every one a reviewed choice.
 - **Capabilities in order of need.** First increment: `Clock`, `Random`, `Kv`. For the migrations:
-  - `Http`: outbound, scoped to an origin allowlist in the wiring (`http://<speaker>:1400`,
-    `https://api.spotify.com`). Shared with the server's outbound need.
-  - `Discovery`: SSDP/mDNS; the result is addresses the `Http` scope then allows.
+  - `Http` and `Discovery`: built, see below.
   - `Dir`: a directory handle the app can't escape (cap-std style), for the book folder or a
     mounted reader. The `powerbox` shape for a terminal: the path comes from config or arguments.
   - `OpenUrl` and a loopback callback for OAuth logins.
+
+## Network capabilities
+`caps/net` (traits and scopes), `caps/net-native`, and sim versions in `caps/sim`. Separate from
+`ambit-caps`, so apps without network access don't carry the `http` crate.
+
+```rust
+pub trait Http: Send + Sync { fn send(&self, req: Request) -> Result<Response, HttpError>; }
+pub trait Discovery: Send + Sync { fn ssdp(&self, target: &str, wait: Duration) -> Result<Vec<Device>, _>; }
+
+// wiring: the scope is the reviewable part
+let http = NativeHttp::new(Scope::new([
+    Origin::lan(Scheme::Http, 1400),                  // any speaker, by IP, port 1400
+    Origin::parse("https://api.spotify.com")?,
+    Origin::parse("https://accounts.spotify.com")?,
+]), HttpOptions::default());
+let discovery = NativeDiscovery::new(Targets::new(["urn:schemas-upnp-org:device:ZonePlayer:1"]));
+```
+- **The scope is checked before anything is sent**, by every implementation, sim included: a test
+  that reaches outside the scope fails with `Denied` just as production does.
+- An origin is scheme + host + port: exact (`https://api.spotify.com`), subdomains
+  (`https://*.scdn.co`, not the domain itself), or **the local network**: private and
+  link-local IP literals only, never a name (a name can resolve anywhere), never loopback.
+- **No redirects** (a 3xx comes back; following it is a new request, checked again), no proxy
+  from the environment, no cookies. Response bodies over the limit (16 MiB default) fail
+  `TooLarge`; one timeout covers the whole request (10 s default).
+- `Discovery` only searches granted SSDP targets and only keeps answers from local-network
+  addresses. Multicast TTL 1: the search never leaves the network.
+- Native: ureq with rustls (ring) and the bundled Mozilla roots. Verified against the internet:
+  real HTTPS works, an expired certificate is refused (`--ignored` test).
+- Blocking by design: apps call them from a `Cmd::Task`.
+- Open for `sonos-tui`: the music-service endpoints (SMAPI) come from Sonos at run time, so
+  they can't be listed in advance. Options: a subdomain scope per known service, or a scope
+  that grows only with origins the speaker reported (needs a design).
+- **Discovery on this machine finds nothing**, not even the router: firewalld's `public` zone
+  drops the unicast answers to a multicast search (a Python search on the host shows the same).
+  The speaker answers when addressed directly. A firewall rule is the user's call; a fixed
+  source port for discovery would make that a single, narrow rule.
 
 ## Workspace shape (sketch)
 ```
@@ -323,6 +358,10 @@ debugger comfort.
   text, 4 sim ordering tests. Native checked in a pseudo-terminal: items persist across runs, and
   raw mode, alternate screen, bracketed paste and the cursor are restored on quit. The same
   bypass checks hold for `todo` (E0453; cackle "uses disallowed API `net`").
+- **Network capabilities: built, not yet used by an app.** `Http`, `Discovery`, scopes; native
+  (ureq + rustls, UDP) and sim. 7 scope tests, 4 native HTTP tests against a local server, 4 sim
+  tests, SSDP answer parsing. Cackle permissions for the TLS stack (ring's C build, unsafe in
+  rustls' dependencies).
 - sim `MemKv` fault injection (`Faults::All`, `Faults::Writes`), with spec tests.
 - **hermit backend: works.** `platforms/server/hermit`, `run-hermit`. `platforms/server/std` holds
   what native and hermit share: the bounded HTTP server and `StdClock`.
@@ -347,8 +386,9 @@ debugger comfort.
    agent identity to push under, and whether to enable local write-deny rules.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
-3. `tui`: the `Http` capability (outbound, origin allowlist) and `Discovery`, then migrate
-   `sonos-tui`; then `Dir` and `crossload`. Then `cli`.
+3. Package the enforcement (checks, allowlists, cackle, CODEOWNERS) so another repo can adopt
+   it; then migrate `sonos-tui` (needs: `OpenUrl` + OAuth callback, a scope for music-service
+   endpoints); then `Dir` and `crossload`. Then `cli`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.

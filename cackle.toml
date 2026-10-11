@@ -272,6 +272,63 @@ allow_apis = [
     "net",
 ]
 
+[pkg.shlex]
+allow_unsafe = true
+
+[pkg.find-msvc-tools]
+allow_unsafe = true
+from.build.allow_apis = [
+    "env",
+    "fs",
+]
+
+[pkg.zeroize]
+allow_unsafe = true
+
+[pkg.cc]
+allow_unsafe = true
+from.build.allow_apis = [
+    "env",
+    "fs",
+    "process",
+    "terminate",
+]
+
+[pkg.rustls-pki-types]
+allow_unsafe = true
+
+[pkg.ring]
+build.allow_apis = [
+    "env",
+    "fs",
+    "process",
+]
+build.allow_build_instructions = [
+    "cargo:rustc-link-lib=static=ring_core_*",
+    "cargo:rustc-link-search=native=*",
+]
+allow_unsafe = true
+
+[pkg.subtle]
+allow_unsafe = true
+
+[pkg.utf8-zero]
+allow_unsafe = true
+
+[pkg.percent-encoding]
+allow_unsafe = true
+
+[pkg.ambit-caps-net-native]
+allow_apis = [
+    "net",
+]
+
+[pkg.ureq]
+from.test.allow_apis = [
+    "env",
+    "net",
+]
+
 [api.net]
 include = [
     "mio::net",

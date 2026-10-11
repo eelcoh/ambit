@@ -1,0 +1,11 @@
+[package]
+name = "ambit-caps-net-native"
+description = "Network capabilities on Linux/Mac: HTTP(S) via ureq + rustls, SSDP over UDP. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps-net.workspace = true
+httparse.workspace = true
+ureq.workspace = true

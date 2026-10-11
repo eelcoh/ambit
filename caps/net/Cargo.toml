@@ -1,0 +1,9 @@
+[package]
+name = "ambit-caps-net"
+description = "Network capability traits: outbound HTTP and local discovery, with their scopes. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+http.workspace = true
