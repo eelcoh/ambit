@@ -102,8 +102,24 @@ impl Mods {
     };
 }
 
-/// Blocking work the platform runs off the UI thread. It captures the capabilities it needs.
-pub type Task<M> = Box<dyn FnOnce() -> M + Send>;
+/// Blocking work the platform runs off the UI thread. It captures the capabilities it needs,
+/// and can report progress before it returns its result.
+pub type Task<M> = Box<dyn FnOnce(&Progress<M>) -> M + Send>;
+
+/// Hands messages from a running task to the app before the task's result: the phases of a
+/// long transfer, bytes so far. They arrive in the order sent, all before the result.
+pub struct Progress<M>(Box<dyn Fn(M) + Send>);
+
+impl<M> Progress<M> {
+    /// For platforms: `deliver` gets each message.
+    pub fn new(deliver: impl Fn(M) + Send + 'static) -> Self {
+        Self(Box::new(deliver))
+    }
+
+    pub fn send(&self, msg: M) {
+        (self.0)(msg)
+    }
+}
 
 /// What the app asks the platform to do after an update.
 pub enum Cmd<M> {
@@ -124,10 +140,20 @@ pub enum Cmd<M> {
 
 impl<M> Cmd<M> {
     pub fn task(work: impl FnOnce() -> M + Send + 'static) -> Self {
-        Self::Task(Box::new(work))
+        Self::Task(Box::new(move |_| work()))
     }
 
     pub fn serial(work: impl FnOnce() -> M + Send + 'static) -> Self {
+        Self::Serial(Box::new(move |_| work()))
+    }
+
+    /// Like [`Cmd::task`], for work that reports progress on the way.
+    pub fn task_with_progress(work: impl FnOnce(&Progress<M>) -> M + Send + 'static) -> Self {
+        Self::Task(Box::new(work))
+    }
+
+    /// Like [`Cmd::serial`], for work that reports progress on the way.
+    pub fn serial_with_progress(work: impl FnOnce(&Progress<M>) -> M + Send + 'static) -> Self {
         Self::Serial(Box::new(work))
     }
 }

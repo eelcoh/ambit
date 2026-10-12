@@ -202,6 +202,9 @@ libgourou (C++). Open in ambit; what crossload does about each for now:
   Chaining one task per phase would work but splits one transfer function in four; crossload
   names each book as it starts instead. A task with a progress sender (`Cmd::stream`) would
   fit.
+  **Resolved:** `Cmd::task_with_progress` and `Cmd::serial_with_progress` give the work a
+  `Progress` to `send` messages through while it runs; they reach `update` in order, before
+  the result (the sim delivers them after the inline work, same order).
 - **`SimDir` has no modification times.** Caches keyed on (size, mtime), as crossload's identity
   cache is, can't be tested on the sim: those tests use `NativeDir` on a temp directory. A
   `modified` driven by `SimClock`, and a `touch`, would do. `SimDir` also has no symlinks, so

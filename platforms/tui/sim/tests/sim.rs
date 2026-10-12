@@ -120,3 +120,26 @@ fn the_first_event_is_the_size_then_serial_tasks_in_order() {
         ["Resize(80, 24)", "Msg(\"one\")", "Msg(\"two\")"]
     );
 }
+
+#[test]
+fn progress_arrives_in_order_before_the_result() {
+    let sim = sim(
+        Cmd::Batch(vec![
+            Cmd::task_with_progress(|p| {
+                p.send("reading");
+                p.send("uploading");
+                "done"
+            }),
+            Cmd::serial_with_progress(|p| {
+                p.send("serial step");
+                "serial done"
+            }),
+        ]),
+        |_| Cmd::None,
+    );
+    let seen: Vec<&str> = sim.app().seen.iter().map(|(m, _)| *m).collect();
+    assert_eq!(
+        seen,
+        ["reading", "uploading", "done", "serial step", "serial done"]
+    );
+}

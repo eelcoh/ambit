@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 pub use ambit_caps_sim::{Faults, MemKv, SeededRandom, SimClock};
-use ambit_tui::{App, Buffer, Cmd, Event, Key, Rect, flatten};
+use ambit_tui::{App, Buffer, Cmd, Event, Key, Progress, Rect, flatten};
 
 pub struct Sim<A: App> {
     app: A,
@@ -113,9 +113,22 @@ impl<A: App> Sim<A> {
                     if self.quit {
                         continue;
                     }
-                    let mut cmds = Vec::new();
-                    flatten(self.app.update(Event::Msg(work())), &mut cmds);
-                    queue.extend(cmds);
+                    // Inline: progress is delivered after the work, in order, before its result.
+                    let sent = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+                    let sink = sent.clone();
+                    let progress = Progress::new(move |msg| {
+                        sink.lock().unwrap_or_else(|e| e.into_inner()).push(msg)
+                    });
+                    let result = work(&progress);
+                    let sent = std::mem::take(&mut *sent.lock().unwrap_or_else(|e| e.into_inner()));
+                    for msg in sent.into_iter().chain([result]) {
+                        if self.quit {
+                            break;
+                        }
+                        let mut cmds = Vec::new();
+                        flatten(self.app.update(Event::Msg(msg)), &mut cmds);
+                        queue.extend(cmds);
+                    }
                 }
                 Cmd::None | Cmd::Batch(_) => unreachable!("flattened"),
             }

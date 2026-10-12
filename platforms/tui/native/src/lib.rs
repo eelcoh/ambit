@@ -16,7 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub use ambit_caps_native::{MemKv, NativeKv, OsRandom, StdClock};
-use ambit_tui::{App, Cmd, Event, Key, KeyCode, Mods, Task, flatten};
+use ambit_tui::{App, Cmd, Event, Key, KeyCode, Mods, Progress, Task, flatten};
 use ratatui_core::terminal::Terminal;
 use ratatui_crossterm::CrosstermBackend;
 use ratatui_crossterm::crossterm::{cursor, event, execute, terminal};
@@ -238,14 +238,19 @@ impl<A: App> Loop<A> {
     }
 }
 
-fn worker<M>(queue: &Mutex<Receiver<Task<M>>>, tx: &Sender<Input<M>>) {
+fn worker<M: Send + 'static>(queue: &Mutex<Receiver<Task<M>>>, tx: &Sender<Input<M>>) {
     loop {
         let job = match queue.lock() {
             Ok(rx) => rx.recv(),
             Err(_) => return,
         };
         let Ok(job) = job else { return };
-        let result = match panic::catch_unwind(AssertUnwindSafe(job)) {
+        // The same channel as the result, from the same thread: progress arrives first, in order.
+        let progress_tx = tx.clone();
+        let progress = Progress::new(move |msg| {
+            let _ = progress_tx.send(Input::Msg(msg));
+        });
+        let result = match panic::catch_unwind(AssertUnwindSafe(|| job(&progress))) {
             Ok(msg) => Input::Msg(msg),
             Err(_) => Input::Failed(io::Error::other("a task panicked")),
         };
@@ -340,4 +345,33 @@ fn restore() {
         cursor::Show
     );
     let _ = terminal::disable_raw_mode();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_arrives_in_order_before_the_result() {
+        let (jobs, queue) = mpsc::channel::<Task<u32>>();
+        let (tx, rx) = mpsc::channel();
+        let queue = Mutex::new(queue);
+        jobs.send(Box::new(|p: &Progress<u32>| {
+            for i in 0..100 {
+                p.send(i);
+            }
+            100
+        }))
+        .unwrap();
+        drop(jobs);
+        worker(&queue, &tx);
+        let got: Vec<u32> = rx
+            .try_iter()
+            .map(|input| match input {
+                Input::Msg(m) => m,
+                _ => panic!("expected messages only"),
+            })
+            .collect();
+        assert_eq!(got, (0..=100).collect::<Vec<_>>());
+    }
 }
