@@ -175,18 +175,28 @@ libgourou (C++). Open in ambit; what crossload does about each for now:
   in later is never seen, and one unplugged leaves a stale handle. crossload's wiring has a
   `Mount` (`run-crossload/src/mount.rs`) that opens the path again on every call, so the tree is
   whatever is mounted there now, with cap-std's rules. A `NativeDir::mount(path)` would do.
+  **Resolved:** `NativeDir::mount(path)` opens the path again on every call; while nothing is
+  there, calls fail with the new `DirErrorKind::Unavailable` and nothing is created.
+  `NativeDir::creating(path)` is the same, but makes the folder on the first write (the app's
+  own folders only, never a device). `SimDir::plugged(false)` unplugs the sim.
 - **Choosing folders at run time.** The settings panel can name new folders and devices, which
   the app cannot open (the powerbox question, for a terminal). crossload saves the settings,
   sets an `Arc<AtomicBool>` it got in `Config`, and quits; the wiring loops, reads the settings
   again and starts the app with new capabilities. Needs: `run` returning something from the
   app (e.g. `App::finish(self) -> T`), or a terminal powerbox. Related: the panel used to mark
   typed paths "folder found" / "Kobo found"; now it can only say what the wiring opened at
-  launch.
+  launch. **Resolved (the restart part):** native `run` returns the app when it quits, so the
+  wiring can ask it for the new settings (an ordinary method on the app) and start it again
+  with new capabilities, in the same process (see the next point). `Sim::into_app` likewise.
+  A terminal powerbox is still open.
 - **`run` can't be called twice in one process.** The native backend's input thread stays blocked
   in `event::read()` after `run` returns, and swallows the next key of a second `run`. crossload
   restarts by re-executing itself instead (`exec`, with the arguments that don't override the
   saved settings). Stopping the input thread on return (poll with a timeout and a stop flag)
-  would allow a loop in the wiring.
+  would allow a loop in the wiring. **Resolved:** the reader polls every 50 ms and is stopped
+  and joined before `run` returns, also on an error; the panic hook is installed once. Checked
+  in a pseudo-terminal with `platforms/tui/native/examples/twice.rs`: two runs, every key
+  arrives.
 - **Progress from a running task.** `Cmd::task` returns one message. The old worker reported
   phases (reading, preparing, uploading, verifying) of a copy that can take minutes over Wi-Fi.
   Chaining one task per phase would work but splits one transfer function in four; crossload

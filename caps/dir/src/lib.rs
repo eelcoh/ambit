@@ -184,6 +184,8 @@ pub enum DirErrorKind {
     Exists,
     /// The volume is full. Nothing was changed.
     Full,
+    /// The tree isn't there right now, like a card that's unplugged. Nothing was changed.
+    Unavailable,
     Io,
 }
 

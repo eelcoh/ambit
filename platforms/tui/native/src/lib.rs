@@ -9,8 +9,9 @@ use std::fs::File;
 use std::io::{self, Stdout};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Once};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -41,11 +42,16 @@ impl Default for Options {
     }
 }
 
-/// Runs the app until it returns `Cmd::Quit`.
-pub fn run<A: App>(app: A, options: Options) -> io::Result<()> {
+/// Runs the app until it returns `Cmd::Quit`, and gives it back: the wiring can ask it what
+/// it ended with (new settings, say) and run it, or a new one, again. By then the terminal is
+/// restored and the input reader has stopped. Tasks still running finish on their own; their
+/// results are dropped.
+pub fn run<A: App>(app: A, options: Options) -> io::Result<A> {
     let _restore = Restore::enter()?;
     let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    Loop::new(app, options).run(&mut term)
+    let mut lp = Loop::new(app, options);
+    lp.run(&mut term)?;
+    Ok(lp.finish())
 }
 
 enum Input<M> {
@@ -63,7 +69,27 @@ struct Loop<A: App> {
     serial: Sender<Task<A::Msg>>,
     timers: Vec<(Instant, u64, A::Msg)>,
     next_timer: u64,
+    _reader: Reader,
 }
+
+/// The input reader thread; stopped and joined on drop, also on an error return, so no reader
+/// is left behind.
+struct Reader {
+    stop: Arc<AtomicBool>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl Drop for Reader {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// How often the input reader checks whether it should stop.
+const INPUT_POLL: Duration = Duration::from_millis(50);
 
 impl<A: App> Loop<A> {
     fn new(app: A, options: Options) -> Self {
@@ -80,14 +106,19 @@ impl<A: App> Loop<A> {
         let serial_tx = tx.clone();
         thread::spawn(move || worker(&serial_queue, &serial_tx));
         let input = tx.clone();
-        thread::spawn(move || {
-            loop {
-                let sent = match event::read() {
-                    Ok(e) => input.send(Input::Term(e)),
-                    Err(e) => {
-                        let _ = input.send(Input::Failed(e));
-                        break;
-                    }
+        let stop_input = Arc::new(AtomicBool::new(false));
+        let stop = stop_input.clone();
+        // Polls instead of blocking in read, so it can stop when the loop ends: a reader left
+        // blocked would take the first key of the next run.
+        let reader = thread::spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                let sent = match event::poll(INPUT_POLL) {
+                    Ok(false) => continue,
+                    Ok(true) => match event::read() {
+                        Ok(e) => input.send(Input::Term(e)),
+                        Err(e) => input.send(Input::Failed(e)),
+                    },
+                    Err(e) => input.send(Input::Failed(e)),
                 };
                 if sent.is_err() {
                     break;
@@ -102,7 +133,17 @@ impl<A: App> Loop<A> {
             serial,
             timers: Vec::new(),
             next_timer: 0,
+            _reader: Reader {
+                stop: stop_input,
+                thread: Some(reader),
+            },
         }
+    }
+
+    /// Stops the input reader and gives the app back. The task queues close too: workers end
+    /// after their current task.
+    fn finish(self) -> A {
+        self.app
     }
 
     fn run(&mut self, term: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
@@ -255,13 +296,23 @@ fn convert<M>(e: event::Event) -> Option<Event<M>> {
 /// Puts the terminal in app mode, and back on drop and on panic.
 struct Restore;
 
+/// Whether the terminal is in app mode, for the panic hook.
+static ACTIVE: AtomicBool = AtomicBool::new(false);
+
 impl Restore {
     fn enter() -> io::Result<Self> {
-        let previous = panic::take_hook();
-        panic::set_hook(Box::new(move |info| {
-            restore();
-            previous(info);
-        }));
+        // Installed once, however often `run` is called; restores only while a run is active.
+        static HOOK: Once = Once::new();
+        HOOK.call_once(|| {
+            let previous = panic::take_hook();
+            panic::set_hook(Box::new(move |info| {
+                if ACTIVE.load(Ordering::Relaxed) {
+                    restore();
+                }
+                previous(info);
+            }));
+        });
+        ACTIVE.store(true, Ordering::Relaxed);
         terminal::enable_raw_mode()?;
         let guard = Self;
         execute!(
@@ -277,6 +328,7 @@ impl Restore {
 impl Drop for Restore {
     fn drop(&mut self) {
         restore();
+        ACTIVE.store(false, Ordering::Relaxed);
     }
 }
 

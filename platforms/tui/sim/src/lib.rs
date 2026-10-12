@@ -136,6 +136,11 @@ impl<A: App> Sim<A> {
         &self.app
     }
 
+    /// The app, as native `run` gives it back when it ends.
+    pub fn into_app(self) -> A {
+        self.app
+    }
+
     /// The screen as the user would see it: one line per row, trailing spaces trimmed.
     pub fn screen(&self) -> String {
         let buf = self.buffer();

@@ -396,6 +396,8 @@ struct SimTree {
     dirs: BTreeSet<Vec<String>>,
     /// Free bytes; `None` is unlimited.
     space: Option<u64>,
+    /// Unplugged: every call fails with `Unavailable`.
+    unplugged: bool,
 }
 
 impl SimDir {
@@ -434,6 +436,21 @@ impl SimDir {
     pub fn space(&self, bytes: u64) -> &Self {
         lock(&self.tree).space = Some(bytes);
         self
+    }
+
+    /// Unplugs the tree (`false`) or plugs it back in (`true`), like a card. While unplugged,
+    /// every call fails with `Unavailable`; the contents are kept for when it's back.
+    pub fn plugged(&self, plugged: bool) -> &Self {
+        lock(&self.tree).unplugged = !plugged;
+        self
+    }
+
+    fn plugged_tree(&self) -> Result<MutexGuard<'_, SimTree>, DirError> {
+        let tree = lock(&self.tree);
+        if tree.unplugged {
+            return Err(DirError::new(DirErrorKind::Unavailable, "sim: unplugged"));
+        }
+        Ok(tree)
     }
 
     /// The contents of the file at `path`, if there is one: what the app wrote.
@@ -504,7 +521,7 @@ impl SimTree {
 
 impl Dir for SimDir {
     fn metadata(&self, path: &RelPath) -> Result<Meta, DirError> {
-        let tree = lock(&self.tree);
+        let tree = self.plugged_tree()?;
         if tree.is_dir(path.parts()) {
             return Ok(Meta {
                 is_dir: true,
@@ -524,7 +541,7 @@ impl Dir for SimDir {
     }
 
     fn open(&self, path: &RelPath) -> Result<Box<dyn DirFile>, DirError> {
-        let tree = lock(&self.tree);
+        let tree = self.plugged_tree()?;
         if tree.is_dir(path.parts()) {
             return Err(DirError::new(
                 DirErrorKind::WrongKind,
@@ -539,7 +556,7 @@ impl Dir for SimDir {
     }
 
     fn list(&self, path: &RelPath) -> Result<Vec<DirEntry>, DirError> {
-        let tree = lock(&self.tree);
+        let tree = self.plugged_tree()?;
         let parts = path.parts();
         if !tree.is_dir(parts) {
             let kind = if tree.files.contains_key(parts) {
@@ -569,7 +586,7 @@ impl Dir for SimDir {
 
 impl DirWrite for SimDir {
     fn create_dir(&self, path: &RelPath) -> Result<(), DirError> {
-        let mut tree = lock(&self.tree);
+        let mut tree = self.plugged_tree()?;
         let parts = path.parts();
         for i in 1..=parts.len() {
             if tree.files.contains_key(&parts[..i]) {
@@ -586,7 +603,7 @@ impl DirWrite for SimDir {
     }
 
     fn create_new(&self, path: &RelPath, contents: &[u8]) -> Result<(), DirError> {
-        let mut tree = lock(&self.tree);
+        let mut tree = self.plugged_tree()?;
         if path.is_root() {
             return Err(DirError::new(
                 DirErrorKind::Invalid,
@@ -602,7 +619,7 @@ impl DirWrite for SimDir {
     }
 
     fn available_space(&self, path: &RelPath) -> Result<u64, DirError> {
-        let tree = lock(&self.tree);
+        let tree = self.plugged_tree()?;
         if !tree.is_dir(path.parts()) {
             return Err(SimTree::not_found(path));
         }
@@ -612,14 +629,14 @@ impl DirWrite for SimDir {
 
 impl DirModify for SimDir {
     fn replace(&self, path: &RelPath, contents: &[u8]) -> Result<(), DirError> {
-        let mut tree = lock(&self.tree);
+        let mut tree = self.plugged_tree()?;
         tree.check_write(path, contents)?;
         tree.write(path, contents);
         Ok(())
     }
 
     fn remove_file(&self, path: &RelPath) -> Result<(), DirError> {
-        let mut tree = lock(&self.tree);
+        let mut tree = self.plugged_tree()?;
         if tree.is_dir(path.parts()) {
             return Err(DirError::new(
                 DirErrorKind::WrongKind,

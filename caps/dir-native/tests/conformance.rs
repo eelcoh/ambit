@@ -112,3 +112,50 @@ fn symlinks_may_not_lead_outside() {
     .unwrap();
     assert_eq!(text, "one");
 }
+
+#[test]
+fn a_mount_follows_what_is_there() {
+    let base = Temp::new("mount");
+    let at = base.0.join("card");
+    let dir = NativeDir::mount(&at);
+    let path = |p: &str| RelPath::parse(p).unwrap();
+    let unavailable =
+        |e: ambit_caps_dir::DirError| assert_eq!(e.kind, DirErrorKind::Unavailable, "{e}");
+
+    // Nothing plugged in: every call says so, and nothing is created.
+    unavailable(dir.list(&RelPath::root()).unwrap_err());
+    unavailable(dir.create_new(&path("book.epub"), b"x").unwrap_err());
+    unavailable(dir.create_dir(&path("Books")).unwrap_err());
+    unavailable(dir.available_space(&RelPath::root()).unwrap_err());
+    assert!(!at.exists());
+
+    // Plugged in: the same handle sees it, with the usual behaviour.
+    let card = fixture("mount-card");
+    fs::rename(&card.0, &at).unwrap();
+    ambit_caps_conformance::dir(&dir);
+    ambit_caps_conformance::dir_modify(&dir);
+
+    // Another one in its place: seen too.
+    fs::remove_dir_all(&at).unwrap();
+    unavailable(dir.metadata(&path("a")).unwrap_err());
+    fs::create_dir(&at).unwrap();
+    fs::write(at.join("other.epub"), "o").unwrap();
+    assert_eq!(dir.list(&RelPath::root()).unwrap().len(), 1);
+}
+
+#[test]
+fn a_creating_folder_is_made_on_first_write() {
+    let base = Temp::new("creating");
+    let at = base.0.join("Books/Imported");
+    let dir = NativeDir::creating(&at);
+    let path = |p: &str| RelPath::parse(p).unwrap();
+
+    assert_eq!(
+        dir.list(&RelPath::root()).unwrap_err().kind,
+        DirErrorKind::Unavailable
+    );
+    assert!(dir.available_space(&RelPath::root()).unwrap() > 0);
+    assert!(!at.exists(), "reading and asking for room create nothing");
+    dir.create_new(&path("book.epub"), b"book").unwrap();
+    assert_eq!(fs::read_to_string(at.join("book.epub")).unwrap(), "book");
+}

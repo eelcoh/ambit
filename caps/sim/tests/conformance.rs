@@ -56,3 +56,20 @@ fn dir_space_runs_out() {
     dir.remove_file(&path("a")).unwrap();
     assert_eq!(dir.available_space(&RelPath::root()).unwrap(), 10);
 }
+
+#[test]
+fn dir_unplugged() {
+    use ambit_caps_dir::{Dir, DirErrorKind, DirWrite, RelPath};
+
+    let dir = ambit_caps_sim::SimDir::new();
+    dir.file("book.epub", "b");
+    dir.plugged(false);
+    let e = dir.list(&RelPath::root()).unwrap_err();
+    assert_eq!(e.kind, DirErrorKind::Unavailable);
+    let e = dir
+        .create_new(&RelPath::parse("x").unwrap(), b"x")
+        .unwrap_err();
+    assert_eq!(e.kind, DirErrorKind::Unavailable);
+    dir.plugged(true);
+    assert_eq!(dir.list(&RelPath::root()).unwrap().len(), 1);
+}

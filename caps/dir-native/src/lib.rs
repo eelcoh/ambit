@@ -2,6 +2,9 @@
 //! resolved relative to it by cap-std, which refuses `..` and symlinks that lead outside. No
 //! check-then-open gap: what was checked is what gets opened.
 //!
+//! [`NativeDir::mount`] is for trees that come and go (a Kobo, a reader's card): the path is
+//! opened again on every call.
+//!
 //! Writing goes through a handle on the parent directory, opened the same way, and names inside
 //! it are single components: a rename there can't land outside the tree.
 #![forbid(unsafe_code)]
@@ -17,15 +20,94 @@ use ambit_caps_dir::{
 use cap_std::fs::OpenOptions;
 
 pub struct NativeDir {
-    dir: cap_std::fs::Dir,
+    root: Root,
+}
+
+enum Root {
+    /// Opened once: the tree stays the one that was there then.
+    Open(cap_std::fs::Dir),
+    /// Opened again on every call: whatever is at `path` now.
+    Mount { path: PathBuf, create: bool },
+}
+
+/// The tree for one call: the handle opened at start, or one opened just now.
+enum Tree<'a> {
+    Kept(&'a cap_std::fs::Dir),
+    Fresh(cap_std::fs::Dir),
+}
+
+impl std::ops::Deref for Tree<'_> {
+    type Target = cap_std::fs::Dir;
+    fn deref(&self) -> &cap_std::fs::Dir {
+        match self {
+            Tree::Kept(dir) => dir,
+            Tree::Fresh(dir) => dir,
+        }
+    }
 }
 
 impl NativeDir {
     /// Opens `root`, an existing directory, as the whole tree the app can see.
     pub fn open(root: impl AsRef<Path>) -> io::Result<Self> {
         let dir = cap_std::fs::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
-        Ok(Self { dir })
+        Ok(Self {
+            root: Root::Open(dir),
+        })
     }
+
+    /// A tree that comes and goes, like a Kobo or a reader's card mounted at `path`: opened
+    /// again on every call, so a device plugged in later is seen, with the same rules. While
+    /// nothing is there, every call fails with `Unavailable`.
+    pub fn mount(path: impl AsRef<Path>) -> Self {
+        Self {
+            root: Root::Mount {
+                path: path.as_ref().to_path_buf(),
+                create: false,
+            },
+        }
+    }
+
+    /// Like [`NativeDir::mount`], but `path` (and its parents) is created on the first write.
+    /// For a folder of the app's own, like where imported books go. Never for a device: an
+    /// unplugged card must not turn into a folder on this computer.
+    pub fn creating(path: impl AsRef<Path>) -> Self {
+        Self {
+            root: Root::Mount {
+                path: path.as_ref().to_path_buf(),
+                create: true,
+            },
+        }
+    }
+
+    fn tree(&self) -> Result<Tree<'_>, DirError> {
+        match &self.root {
+            Root::Open(dir) => Ok(Tree::Kept(dir)),
+            Root::Mount { path, .. } => {
+                cap_std::fs::Dir::open_ambient_dir(path, cap_std::ambient_authority())
+                    .map(Tree::Fresh)
+                    .map_err(|e| unavailable(path, e))
+            }
+        }
+    }
+
+    /// The tree for a write: a creating mount makes its folder first.
+    fn tree_for_write(&self) -> Result<Tree<'_>, DirError> {
+        if let Root::Mount { path, create: true } = &self.root
+            && !path.exists()
+        {
+            std::fs::create_dir_all(path).map_err(|e| unavailable(path, e))?;
+        }
+        self.tree()
+    }
+}
+
+fn unavailable(path: &Path, e: io::Error) -> DirError {
+    let kind = match e.kind() {
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory => DirErrorKind::Unavailable,
+        io::ErrorKind::PermissionDenied => DirErrorKind::Denied,
+        _ => DirErrorKind::Io,
+    };
+    DirError::new(kind, format!("{}: {e}", path.display()))
 }
 
 fn rel(path: &RelPath) -> PathBuf {
@@ -51,7 +133,7 @@ fn err(path: &RelPath, e: io::Error) -> DirError {
 
 impl Dir for NativeDir {
     fn metadata(&self, path: &RelPath) -> Result<Meta, DirError> {
-        let meta = self.dir.metadata(rel(path)).map_err(|e| err(path, e))?;
+        let meta = self.tree()?.metadata(rel(path)).map_err(|e| err(path, e))?;
         Ok(Meta {
             is_dir: meta.is_dir(),
             len: meta.len(),
@@ -60,7 +142,7 @@ impl Dir for NativeDir {
     }
 
     fn open(&self, path: &RelPath) -> Result<Box<dyn File>, DirError> {
-        let file = self.dir.open(rel(path)).map_err(|e| err(path, e))?;
+        let file = self.tree()?.open(rel(path)).map_err(|e| err(path, e))?;
         let meta = file.metadata().map_err(|e| err(path, e))?;
         if meta.is_dir() {
             return Err(DirError::new(
@@ -72,10 +154,11 @@ impl Dir for NativeDir {
     }
 
     fn list(&self, path: &RelPath) -> Result<Vec<Entry>, DirError> {
+        let dir = self.tree()?;
         let entries = if path.is_root() {
-            self.dir.entries()
+            dir.entries()
         } else {
-            self.dir.read_dir(rel(path))
+            dir.read_dir(rel(path))
         }
         .map_err(|e| err(path, e))?;
         let mut out = Vec::new();
@@ -86,8 +169,7 @@ impl Dir for NativeDir {
             };
             // Follows symlinks inside the tree; one pointing outside reads as a file that
             // can't be opened, so it's listed as not a directory.
-            let is_dir = self
-                .dir
+            let is_dir = dir
                 .metadata(rel(path).join(&name))
                 .is_ok_and(|m| m.is_dir());
             out.push(Entry { name, is_dir });
@@ -99,14 +181,20 @@ impl Dir for NativeDir {
 
 impl NativeDir {
     /// The directory holding `path`, and `path`'s name in it.
-    fn parent<'p>(&self, path: &'p RelPath) -> Result<(cap_std::fs::Dir, &'p str), DirError> {
+    fn parent<'p>(
+        &self,
+        path: &'p RelPath,
+        write: bool,
+    ) -> Result<(cap_std::fs::Dir, &'p str), DirError> {
         let (parent, name) = path
             .split_last()
             .ok_or_else(|| DirError::new(DirErrorKind::Invalid, "the tree itself is not a file"))?;
-        let dir = self
-            .dir
-            .open_dir(rel(&parent))
-            .map_err(|e| err(&parent, e))?;
+        let tree = if write {
+            self.tree_for_write()?
+        } else {
+            self.tree()?
+        };
+        let dir = tree.open_dir(rel(&parent)).map_err(|e| err(&parent, e))?;
         Ok((dir, name))
     }
 
@@ -166,10 +254,14 @@ fn sync_dir(dir: &cap_std::fs::Dir) {
 impl DirWrite for NativeDir {
     fn create_dir(&self, path: &RelPath) -> Result<(), DirError> {
         if path.is_root() {
-            return Ok(());
+            return self.tree_for_write().map(drop);
         }
         // A file in the way: create_dir_all says AlreadyExists, or nothing when it's the last part.
-        match self.dir.create_dir_all(rel(path)).map_err(|e| err(path, e)) {
+        match self
+            .tree_for_write()?
+            .create_dir_all(rel(path))
+            .map_err(|e| err(path, e))
+        {
             Err(e) if e.kind != DirErrorKind::Exists => Err(e),
             _ if self.metadata(path).is_ok_and(|m| m.is_dir) => Ok(()),
             _ => Err(DirError::new(
@@ -180,7 +272,7 @@ impl DirWrite for NativeDir {
     }
 
     fn create_new(&self, path: &RelPath, contents: &[u8]) -> Result<(), DirError> {
-        let (dir, name) = self.parent(path)?;
+        let (dir, name) = self.parent(path, true)?;
         let stage = self.stage(&dir, path, contents)?;
         // Atomic and refusing an existing name, also on FAT (Linux) and APFS. A file system
         // without it gets a hard link, which refuses an existing name too.
@@ -206,10 +298,29 @@ impl DirWrite for NativeDir {
     }
 
     fn available_space(&self, path: &RelPath) -> Result<u64, DirError> {
+        // A folder yet to be made has the room of the disk it will be made on.
+        if let Root::Mount {
+            path: root,
+            create: true,
+        } = &self.root
+            && path.is_root()
+            && !root.exists()
+        {
+            let existing = root.ancestors().find(|p| p.is_dir()).ok_or_else(|| {
+                DirError::new(
+                    DirErrorKind::Unavailable,
+                    format!("{}: no parent", root.display()),
+                )
+            })?;
+            return NativeDir::open(existing)
+                .map_err(|e| unavailable(existing, e))?
+                .available_space(path);
+        }
+        let tree = self.tree()?;
         let dir = if path.is_root() {
-            self.dir.try_clone()
+            tree.try_clone()
         } else {
-            self.dir.open_dir(rel(path))
+            tree.open_dir(rel(path))
         }
         .map_err(|e| err(path, e))?;
         let stat = rustix::fs::fstatvfs(&dir).map_err(|e| err(path, e.into()))?;
@@ -219,7 +330,7 @@ impl DirWrite for NativeDir {
 
 impl DirModify for NativeDir {
     fn replace(&self, path: &RelPath, contents: &[u8]) -> Result<(), DirError> {
-        let (dir, name) = self.parent(path)?;
+        let (dir, name) = self.parent(path, true)?;
         if dir.metadata(name).is_ok_and(|m| m.is_dir()) {
             return Err(DirError::new(
                 DirErrorKind::WrongKind,
@@ -236,7 +347,7 @@ impl DirModify for NativeDir {
     }
 
     fn remove_file(&self, path: &RelPath) -> Result<(), DirError> {
-        let (dir, name) = self.parent(path)?;
+        let (dir, name) = self.parent(path, false)?;
         // Not following a symlink: removing one removes the link, never what it points to.
         let meta = dir.symlink_metadata(name).map_err(|e| err(path, e))?;
         if meta.is_dir() {
