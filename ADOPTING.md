@@ -233,6 +233,19 @@ libgourou (C++). Open in ambit; what crossload does about each for now:
   encrypts a PDF. The allowlist and cackle show it; nothing in ambit can say "linked but
   unused".
 
+- **A grant to a library is a grant to every app that can call it.** cackle attributes an API
+  use to the crate whose code makes it, not to whoever called it. In `crossload`, `image` had
+  `fs` (cackle counts path handling as file access), so the app could have called
+  `image::open(any path)`. **Resolved:** `cargo ambit check` now fails when a library in an
+  app's run-time tree has a run-time grant (anything but `terminate`; build scripts, proc
+  macros and build-only dependencies don't count), or when the app has a `[pkg.*]` entry of its
+  own. And ambit's `[api.fs]` excludes `std::path`: a path is a name. The path functions that
+  do reach the disk (`exists`, `metadata`, `read_dir`, `canonicalize`, ...) are a separate API,
+  `path_fs`. Copy `[api.fs]` and `[api.path_fs]` from ambit's `cackle.toml` (or the template
+  `cargo ambit init` writes). Expect cackle to ask for `path_fs` where build tools and wiring
+  check paths, to report `fs` grants as unused where a crate only handled paths, and for
+  `ambit-tui-native` to need `fs` (its `init_tracing` creates the log file).
+
 Notes for adopters with C/C++ dependencies:
 - Put each in a capability crate under `caps/` with a trait crate (and a sim) the app depends
   on; the `unsafe`, the build script and the native libraries stay in the `-native` crate. For

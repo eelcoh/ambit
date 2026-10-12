@@ -300,11 +300,19 @@ commit as their `Cargo.lock` (see ADOPTING.md).
    `allowed-deps.txt` (stale entries fail too); a directory under `apps/` that isn't a workspace
    member fails, so an app can't escape the checks; every dependency comes from crates.io,
    ambit's repository or the workspace, so an allowlisted name from elsewhere is rejected; `Cargo.lock` must match.
+   **No library the app runs with holds a run-time grant in `cackle.toml`** (only `terminate`),
+   and the app has no entry: cackle attributes an API use to the crate whose code makes it, not
+   to the caller, so a grant to a library is a grant to every app that can call it (found in
+   `crossload`: `image` had `fs`, so `image::open(any path)` from the app would have passed).
+   Build scripts, proc macros and build-only dependencies don't count: they run at build time.
 2. **cackle** (`cargo acl`, `cackle.toml`): per-crate API permissions on compiled code, for every
    crate including dependencies. The apps have no entry: no restricted API, no unsafe. It sees
    code that ends up in a binary; unreachable code doesn't, and the lints catch that anyway. Build scripts
    and tests run in Bubblewrap. Catches what level 1 can't see: a dependency's use of
-   `std::net`, or code that slips past the lints.
+   `std::net`, or code that slips past the lints. ambit narrows cackle's `fs`: a path is a name,
+   so `std::path` is excluded, and the path functions that do reach the disk (`exists`,
+   `metadata`, `read_dir`, `canonicalize`, ...) are their own API, `path_fs`. Otherwise every
+   library that formats or clones a `PathBuf` needs `fs`, and the check above could never pass.
 3. **Runtime isolation**: the backend's own mechanism (see table above).
 
 Levels 1 and 2 apply on **every** backend, native included, so dev can't quietly use what prod

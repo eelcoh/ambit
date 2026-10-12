@@ -261,6 +261,12 @@ allow_apis = [
     "process",
 ]
 
+# init_tracing creates the log file the wiring names. Not in any app: apps depend on ambit-tui.
+[pkg.ambit-tui-native]
+allow_apis = [
+    "fs",
+]
+
 [pkg.run-todo]
 allow_apis = [
     "env",
@@ -277,10 +283,7 @@ allow_unsafe = true
 
 [pkg.find-msvc-tools]
 allow_unsafe = true
-from.build.allow_apis = [
-    "env",
-    "fs",
-]
+from.build.allow_apis = ["env", "path_fs"]
 
 [pkg.zeroize]
 allow_unsafe = true
@@ -289,7 +292,7 @@ allow_unsafe = true
 allow_unsafe = true
 from.build.allow_apis = [
     "env",
-    "fs",
+    "fs", "path_fs",
     "process",
     "terminate",
 ]
@@ -363,7 +366,7 @@ allow_unsafe = true
 [pkg.cargo-ambit]
 allow_apis = [
     "env",
-    "fs",
+    "fs", "path_fs",
     "process",
 ]
 
@@ -410,7 +413,7 @@ from.test.allow_apis = [
 [pkg.ambit-caps-dir-native]
 test.allow_apis = [
     "env",
-    "fs",
+    "fs", "path_fs",
     "process",
 ]
 
@@ -461,6 +464,17 @@ allow_apis = ["env", "process"]
 [pkg.data-encoding]
 allow_unsafe = true
 
+# --- cargo-ambit reads cackle.toml (toml and its parser) ---------------------------------------
+
+# The TOML tokenizer: unsafe to skip re-checking UTF-8 it has validated.
+[pkg.winnow]
+allow_unsafe = true
+
+# Built with unsafe code forbidden (its `unsafe` feature is off); cackle sees the word in the
+# switched-off code.
+[pkg.toml_parser]
+allow_unsafe = true
+
 [api.net]
 include = [
     "cap-primitives::net",
@@ -474,6 +488,29 @@ include = [
     "cap-std::fs",
     "rustix::fs",
 ]
+# A path is a name, not access: building, joining or printing one needs no permission. The path
+# functions that do reach the disk are their own API, `path_fs`, below.
+exclude = [
+    "std::path",
+]
+
+# Asking the disk about a path, through std::path (exists, metadata, listing a folder, following
+# links). Separate from fs only because cackle can't re-include these under the exclude above.
+[api.path_fs]
+include = [
+    "std::path::Path::exists",
+    "std::path::Path::try_exists",
+    "std::path::Path::is_file",
+    "std::path::Path::is_dir",
+    "std::path::Path::is_symlink",
+    "std::path::Path::metadata",
+    "std::path::Path::symlink_metadata",
+    "std::path::Path::canonicalize",
+    "std::path::Path::read_link",
+    "std::path::Path::read_dir",
+    "std::path::absolute",
+]
+
 
 [api.process]
 include = [

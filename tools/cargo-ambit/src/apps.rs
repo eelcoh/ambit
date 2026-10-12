@@ -8,6 +8,10 @@
 //!   member: an allowlisted name from another git repo or a stray path is a different crate.
 //! - Every directory under `apps/` with a manifest is a workspace member, or it would escape
 //!   these checks.
+//! - Nothing the app runs with holds a run-time API grant in `cackle.toml`, and the app has no
+//!   entry there. cackle checks which crate's code uses an API, not who asked: a grant to a
+//!   library is a grant to every app that can call it. Build scripts, proc macros and
+//!   build-only dependencies run at build time, so their grants don't count here.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -115,8 +119,42 @@ impl Metadata {
     }
 }
 
+/// APIs a library in an app's run-time tree may be granted: ending the process isn't an effect
+/// on the world.
+const RUNTIME_APIS_OK: &[&str] = &["terminate"];
+
+/// `cackle.toml`'s `[pkg.*]` tables, if the file exists.
+fn cackle_packages(meta: &Metadata) -> Result<toml::Table, String> {
+    let path = meta.workspace_root().join("cackle.toml");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(toml::Table::new());
+    };
+    let config: toml::Table = text
+        .parse()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(config
+        .get("pkg")
+        .and_then(toml::Value::as_table)
+        .cloned()
+        .unwrap_or_default())
+}
+
+/// What a `[pkg.<name>]` entry lets the crate's own code do at run time, beyond what's harmless.
+fn runtime_grants(entry: &toml::Value) -> Vec<String> {
+    entry
+        .get("allow_apis")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .filter(|api| !RUNTIME_APIS_OK.contains(api))
+        .map(str::to_string)
+        .collect()
+}
+
 /// Runs the checks, prints the result per app. Returns the number of problems.
 pub fn check(meta: &Metadata) -> Result<usize, String> {
+    let cackle = cackle_packages(meta)?;
     let packages = meta.packages();
     let members = meta.members();
     let nodes: BTreeMap<&str, &Value> = meta.0["resolve"]["nodes"]
@@ -209,6 +247,60 @@ pub fn check(meta: &Metadata) -> Result<usize, String> {
             }
         }
 
+        // What runs with the app: normal edges only, and not into proc macros (they run in the
+        // compiler, and so does everything they depend on).
+        let is_proc_macro = |id: &str| {
+            packages[id]["targets"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|t| {
+                    t["kind"]
+                        .as_array()
+                        .is_some_and(|k| k.iter().any(|k| k == "proc-macro"))
+                })
+        };
+        let mut runtime = BTreeSet::new();
+        let mut todo = vec![app.id.as_str()];
+        while let Some(id) = todo.pop() {
+            let deps = nodes.get(id).and_then(|n| n["deps"].as_array());
+            for dep in deps.into_iter().flatten() {
+                let normal = dep["dep_kinds"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|k| k["kind"].is_null());
+                if let Some(pkg) = dep["pkg"].as_str()
+                    && normal
+                    && !is_proc_macro(pkg)
+                    && runtime.insert(pkg)
+                {
+                    todo.push(pkg);
+                }
+            }
+        }
+        if cackle.contains_key(&app.name) {
+            errors.push(format!(
+                "cackle.toml has a [pkg.{}] entry: an app gets no permissions of its own",
+                app.name
+            ));
+        }
+        for id in &runtime {
+            let name = packages[id]["name"].as_str().unwrap_or("?");
+            if let Some(entry) = cackle.get(name) {
+                let grants = runtime_grants(entry);
+                if !grants.is_empty() {
+                    errors.push(format!(
+                        "{name} may use {} at run time (cackle.toml), and {} runs with it: the \
+                         app could reach those through {name}. Keep that use in a capability \
+                         the wiring hands in, not in a library the app depends on",
+                        grants.join(", "),
+                        app.name
+                    ));
+                }
+            }
+        }
+
         let actual: BTreeSet<&str> = seen
             .iter()
             .filter_map(|id| packages[id]["name"].as_str())
@@ -257,4 +349,29 @@ fn rel(meta: &Metadata, path: &Path) -> String {
         .unwrap_or(path)
         .display()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_harmless_runtime_grants_pass() {
+        let config: toml::Table = r#"
+            [pkg.leaky]
+            allow_apis = ["fs", "terminate"]
+            [pkg.builder]
+            build.allow_apis = ["fs", "process"]
+            test.allow_apis = ["net"]
+            [pkg.ender]
+            allow_apis = ["terminate"]
+            allow_unsafe = true
+        "#
+        .parse()
+        .unwrap();
+        let pkg = &config["pkg"];
+        assert_eq!(runtime_grants(&pkg["leaky"]), ["fs"]);
+        assert!(runtime_grants(&pkg["builder"]).is_empty());
+        assert!(runtime_grants(&pkg["ender"]).is_empty());
+    }
 }
