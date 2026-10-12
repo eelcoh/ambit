@@ -191,12 +191,15 @@ libgourou (C++). Open in ambit; what crossload does about each for now:
   A terminal powerbox is still open.
 - **`run` can't be called twice in one process.** The native backend's input thread stays blocked
   in `event::read()` after `run` returns, and swallows the next key of a second `run`. crossload
-  restarts by re-executing itself instead (`exec`, with the arguments that don't override the
+  restarted by re-executing itself instead (`exec`, with the arguments that don't override the
   saved settings). Stopping the input thread on return (poll with a timeout and a stop flag)
   would allow a loop in the wiring. **Resolved:** the reader polls every 50 ms and is stopped
   and joined before `run` returns, also on an error; the panic hook is installed once. Checked
   in a pseudo-terminal with `platforms/tui/native/examples/twice.rs`: two runs, every key
-  arrives.
+  arrives. crossload now loops in its wiring: its app type has a `restart()` method that returns
+  the settings it saved, and the wiring opens new capabilities from them and runs it again.
+  That made `init` return a named app type, with its message type wrapped so its internals stay
+  private.
 - **Progress from a running task.** `Cmd::task` returns one message. The old worker reported
   phases (reading, preparing, uploading, verifying) of a copy that can take minutes over Wi-Fi.
   Chaining one task per phase would work but splits one transfer function in four; crossload
