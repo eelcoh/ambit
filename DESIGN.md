@@ -389,6 +389,12 @@ debugger comfort.
 - **The `sonos-tui` gaps, closed** (see ADOPTING.md): initial `Resize`, `Cmd::Serial`, `Dir` on
   cap-std (conformance on native and sim; escapes through symlinks are `Denied`), `Authorize`
   (loopback flow tested with a fake browser), `MemKv` in `caps/std`.
+- **The `crossload` gaps, mostly closed** (see ADOPTING.md): `NativeDir::mount`/`creating` for
+  folders that come and go (`Unavailable` while unplugged; `SimDir::plugged`); native `run`
+  returns the app and stops its input reader, so the wiring can restart it in one process
+  (checked in a pseudo-terminal, `examples/twice.rs`); `Cmd::task_with_progress` and
+  `serial_with_progress` for messages from a running task. Open: a terminal powerbox, sim
+  modification times, names on the local network, run-time endpoints, append, streamed bodies.
 - **Network capabilities: built, not yet used by an app.** `Http`, `Discovery`, scopes; native
   (ureq + rustls, UDP) and sim. 7 scope tests, 4 native HTTP tests against a local server, 4 sim
   tests, SSDP answer parsing. Cackle permissions for the TLS stack (ring's C build, unsafe in
