@@ -115,6 +115,73 @@ impl<T: Dir + ?Sized> Dir for Arc<T> {
     }
 }
 
+/// One file, as a tree that holds only that file: what a file named on the command line opens
+/// as. The folder it's in stays out of reach, apart from that one entry.
+pub struct OneFile {
+    folder: Box<dyn Dir>,
+    name: RelPath,
+}
+
+impl OneFile {
+    /// The file `name` in `folder`. `name` is a single component.
+    pub fn new(folder: impl Dir, name: &str) -> Result<Self, DirError> {
+        Ok(Self {
+            folder: Box::new(folder),
+            name: RelPath::new([name])?,
+        })
+    }
+
+    /// The file's path inside this tree: its name.
+    pub fn path(&self) -> RelPath {
+        self.name.clone()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name.0[0]
+    }
+
+    fn only(&self, path: &RelPath) -> Result<(), DirError> {
+        if *path == self.name {
+            Ok(())
+        } else {
+            Err(DirError::new(DirErrorKind::NotFound, path.to_string()))
+        }
+    }
+}
+
+impl Dir for OneFile {
+    fn metadata(&self, path: &RelPath) -> Result<Meta, DirError> {
+        if path.is_root() {
+            return Ok(Meta {
+                is_dir: true,
+                len: 0,
+                modified: None,
+            });
+        }
+        self.only(path)?;
+        self.folder.metadata(path)
+    }
+    fn open(&self, path: &RelPath) -> Result<Box<dyn File>, DirError> {
+        self.only(path)?;
+        self.folder.open(path)
+    }
+    /// The root lists the file, if it's there; the file itself has nothing below it to list.
+    fn list(&self, path: &RelPath) -> Result<Vec<Entry>, DirError> {
+        if !path.is_root() {
+            self.only(path)?;
+            return Err(DirError::new(DirErrorKind::WrongKind, path.to_string()));
+        }
+        Ok(match self.folder.metadata(&self.name) {
+            Ok(meta) => vec![Entry {
+                name: self.name().to_owned(),
+                is_dir: meta.is_dir,
+            }],
+            Err(e) if e.kind == DirErrorKind::NotFound => vec![],
+            Err(e) => return Err(e),
+        })
+    }
+}
+
 /// Adding to one directory tree. What's already there is never changed or removed: a book copied
 /// onto a card can't overwrite one with the same name, whatever the app does.
 ///

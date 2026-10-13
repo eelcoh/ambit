@@ -9,6 +9,7 @@ disallowed-methods = [
     { path = "std::env::vars", reason = "config comes from the wiring" },
     { path = "std::env::args", reason = "config comes from the wiring" },
     { path = "std::env::set_var", reason = "no ambient state" },
+    { path = "std::env::set_current_dir", reason = "no ambient state: names on the command line are relative to where the program started" },
     { path = "std::env::current_dir", reason = "no filesystem access" },
     { path = "std::fs::read", reason = "no filesystem access" },
     { path = "std::fs::read_to_string", reason = "no filesystem access" },

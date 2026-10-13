@@ -145,6 +145,27 @@ no `std::fs`), and a separate `-native` crate the wiring depends on. sonos-tui's
 (`Dir`, `RelPath`) and `ambit-dir-native` are the example. The trait crate goes in the app's
 `allowed-deps.txt`; the native one gets its cackle entry (`fs`).
 
+## Command-line apps
+`ambit-cli` (contract), `ambit-cli-native`, `ambit-cli-sim`; `apps/keep` and `run-keep` are the
+example. DESIGN.md "CLI platform API" has the reasoning.
+- The app implements `App::run(self, args, io)`: it parses `args` itself and writes through
+  `io.out` (the result) and `io.err` (messages). `println!` stays forbidden.
+- Paths and addresses come in as `Named<T>`: the wiring makes one per kind with
+  `args.named(opener)`, and it opens only what the user typed. Openers for folders and files are
+  in `ambit_cli_native::open`; for anything else (a device, a scoped connection) the wiring
+  writes its own, a function from the typed text to the capability.
+- clap: use the builder API, not the derive (its generated code conflicts with the app rules),
+  with `default-features = false, features = ["std", "help", "usage", "error-context",
+  "suggestions"]`, so it asks nothing of the terminal or the environment. Grant `clap_lex` and
+  `anstyle` `allow_unsafe` in cackle.toml (small text conversions). Render errors with
+  `e.render()`; `e.use_stderr()` says whether it's an error (exit 2) or help (exit 0).
+- Tables: lay them out yourself, or use a crate that takes the width as a number, like
+  comfy-table with `default-features = false` and `set_width`. Anything that asks the terminal
+  for its size (comfy-table's default `tty` feature, crossterm) won't pass. Take the width from
+  `io.terminal`, and write tabs when it's `None`.
+- The wiring returns `ExitCode::from(done.0)` from `main`; its cackle entry needs `process` for
+  that.
+
 ## Gaps found by the sonos-tui migration
 Resolved in ambit, as follows:
 - **Initial size**: the first event is always `Event::Resize` with the current size, right after
@@ -228,6 +249,7 @@ libgourou (C++). Open in ambit; what crossload does about each for now:
 - **The CLI has no platform yet.** crossload's command line moved into the wiring (human-owned)
   and calls the app's functions with native capabilities built there: about 1700 lines of
   argument handling and printing on the human review surface until there is a cli platform.
+  **Resolved:** `ambit-cli` (see "Command-line apps").
 - **Dependencies with their own authority.** `lopdf` (PDF reading) always depends on its
   encryption stack, including `rand`/`getrandom` (OS randomness), though crossload never
   encrypts a PDF. The allowlist and cackle show it; nothing in ambit can say "linked but

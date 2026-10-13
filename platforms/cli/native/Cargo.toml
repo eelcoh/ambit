@@ -1,0 +1,15 @@
+[package]
+name = "ambit-cli-native"
+description = "Native backend for the cli platform: the process's arguments and standard streams, and openers for what the user named. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps-dir.workspace = true
+ambit-caps-dir-native.workspace = true
+ambit-caps-native.workspace = true
+ambit-cli.workspace = true
+# The terminal's width.
+rustix = { workspace = true, features = ["termios"] }
+

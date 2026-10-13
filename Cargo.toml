@@ -18,12 +18,17 @@ members = [
     "platforms/tui/api",
     "platforms/tui/native",
     "platforms/tui/sim",
+    "platforms/cli/api",
+    "platforms/cli/native",
+    "platforms/cli/sim",
     "apps/shortener",
     "apps/todo",
+    "apps/keep",
     "spec",
     "run-native",
     "run-hermit",
     "run-todo",
+    "run-keep",
     "tools/cargo-ambit",
 ]
 exclude = ["spikes"]
@@ -52,9 +57,17 @@ ambit-tui = { path = "platforms/tui/api" }
 ambit-tui-native = { path = "platforms/tui/native" }
 ambit-tui-sim = { path = "platforms/tui/sim" }
 shortener = { path = "apps/shortener" }
+ambit-cli = { path = "platforms/cli/api" }
+ambit-cli-native = { path = "platforms/cli/native" }
+ambit-cli-sim = { path = "platforms/cli/sim" }
 todo = { path = "apps/todo" }
+keep = { path = "apps/keep" }
 
 cap-std = "4.0.3"
+# Argument parsing for the example cli app. No colour, no terminal or environment queries: those
+# would reach outside what the app is given. No derive: the code it generates switches off lint
+# groups the app rules forbid.
+clap = { version = "4.6", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions"] }
 # What cap-std doesn't offer: rename-without-replacing, free space, syncing a directory. The
 # version cap-std already uses.
 rustix = { version = "1.1.5", default-features = false, features = ["fs", "std"] }

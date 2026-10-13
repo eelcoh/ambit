@@ -390,7 +390,7 @@ build.allow_apis = [
     "process",
 ]
 allow_unsafe = true
-from.test.allow_apis = [
+allow_apis = [
     "fs",
 ]
 
@@ -406,11 +406,15 @@ build.allow_apis = [
     "process",
 ]
 allow_unsafe = true
-from.test.allow_apis = [
+allow_apis = [
     "fs",
 ]
 
+# Folders on disk, for the wiring to hand to apps (run-keep).
 [pkg.ambit-caps-dir-native]
+allow_apis = [
+    "fs", "path_fs",
+]
 test.allow_apis = [
     "env",
     "fs", "path_fs",
@@ -473,6 +477,32 @@ allow_unsafe = true
 # Built with unsafe code forbidden (its `unsafe` feature is off); cackle sees the word in the
 # switched-off code.
 [pkg.toml_parser]
+allow_unsafe = true
+
+# The cli backend reads the command line and NO_COLOR, and ends the program when an argument
+# isn't text. Not in any app: apps depend on ambit-cli.
+[pkg.ambit-cli-native]
+allow_apis = [
+    "env",
+    "terminate",
+]
+test.allow_apis = [
+    "fs", "path_fs",
+    "process",
+]
+
+# The wiring returns the exit code.
+[pkg.run-keep]
+allow_apis = [
+    "process",
+]
+
+# The keep example's argument parser. Both use unsafe only to skip a re-check when turning bytes
+# they built from text back into text.
+[pkg.clap_lex]
+allow_unsafe = true
+
+[pkg.anstyle]
 allow_unsafe = true
 
 [api.net]

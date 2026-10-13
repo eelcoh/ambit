@@ -1,0 +1,8 @@
+[package]
+name = "ambit-cli"
+description = "The cli platform's contract: the App trait, the program's input and output, and capabilities that open only what the user named. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]

@@ -34,7 +34,7 @@ mainly in how the platform calls the app. **The platform owns `main` and the eve
 
 | platform | entry shape                                                    |
 |----------|----------------------------------------------------------------|
-| `cli`    | `main(args, caps) -> exit code`                                |
+| `cli`    | `run(args, io) -> done` (an exit code, or what the wiring does next) |
 | `server` | `handle(request, caps) -> response`                            |
 | `tui`    | `update(model, event) -> (model, commands)`, `view(model) -> View` |
 | `gui`    | same Elm shape as `tui`, with a different `View` vocabulary    |
@@ -218,6 +218,55 @@ pub fn init(clock: impl Clock, kv: impl Kv) -> impl App
     FAT and APFS). The powerbox shape for a terminal: the wiring picks the tree, from arguments
     or config.
   - `Authorize` (OAuth login in the browser, loopback redirect): built, in `caps/net`.
+
+## CLI platform API
+Same principles again: capabilities are `init`'s parameters, the platform owns the process. Shaped
+by `crossload`'s command line (about 1700 lines that sat in its wiring until now).
+
+```rust
+// platforms/cli/api
+pub trait App { type Done; fn run(self, args: &[String], io: &mut Io<'_>) -> Self::Done; }
+pub struct Io<'a> { input: &mut dyn BufRead, out: &mut dyn Write, err: &mut dyn Write,
+                    terminal: Option<Terminal> }        // width and colour, when out is one
+pub struct Named<T>;  // opens what the user named on the command line, and nothing else
+
+// apps/keep: the example
+pub fn init(clock: impl Clock, files: Named<OneFile>, folders: Named<impl DirWrite>) -> impl App
+
+// run-keep: wiring
+let args = ambit_cli_native::args();
+let app = keep::init(StdClock::new(), args.named(open::file), args.named(open::creating));
+ExitCode::from(ambit_cli_native::run(app, &args).0)
+```
+- **Naming is granting.** A path or address the user types is the user's choice, so it's the
+  user's grant: the terminal's version of a file picker. The wiring wraps an opener of its
+  choice in `args.named(..)`; the app gets a `Named<T>` that opens a value only if the user
+  typed it (a whole argument, or the value of `--option=value`; not `-ofile`). What a name
+  becomes is the wiring's choice and shows in `init`: a folder to read, a folder to add to
+  (created on the first write), one file alone (`OneFile`: the folder it's in stays out of
+  reach), a device on the local network.
+- **Defaults from saved settings** count as named when the wiring says so (`named.also(..)`).
+  Those settings are written by the app, so this is a hole the wiring opens knowingly, as in
+  the tui: an app could save a path the user never typed. Per wiring, keep it to the settings
+  the user sets.
+- **The app parses its own arguments**, with any parser that only computes. clap's builder
+  works; clap's derive doesn't (its generated code switches off whole clippy groups, which
+  conflicts with the app rules' forbids: E0453). clap without its `color`, `env` and
+  `wrap_help` features asks nothing of the terminal or the environment; help and errors are
+  rendered to text and written through `Io`.
+- **Output goes through `Io`**, never `println!` (forbidden in apps). `out` is the result, `err`
+  is messages and progress. `terminal` is `Some` when `out` is a terminal, so tables line up
+  there and come out tab-separated in a pipe.
+- **`Done` goes back to the wiring**: an `Exit`, or what the wiring does next (crossload:
+  "start the terminal interface with these settings").
+- **Synchronous.** A command runs start to finish on the main thread; long work reports
+  progress on `err` as it goes. No `Cmd`, no tasks.
+- **Arguments must be text.** One that isn't valid UTF-8 stops the program with exit code 2
+  before the app runs: a mangled copy could name a different file.
+- **Backends.** `native`: the process's arguments and streams, the width from the terminal,
+  `NO_COLOR`, and openers on `NativeDir` (`open::folder`, `mount`, `creating`, `file`). `sim`:
+  a command line and input in, output and the result out as text; openers over named
+  `SimDir`s (`folders`, `files`).
 
 ## Network capabilities
 `caps/net` (traits and scopes), `caps/net-native`, and sim versions in `caps/sim`. Separate from
@@ -403,6 +452,12 @@ debugger comfort.
   (checked in a pseudo-terminal, `examples/twice.rs`); `Cmd::task_with_progress` and
   `serial_with_progress` for messages from a running task. Open: a terminal powerbox, sim
   modification times, names on the local network, run-time endpoints, append, streamed bodies.
+- **`cli` platform, native + sim: works.** `platforms/cli/{api,native,sim}`, example `apps/keep`
+  (`Clock`, a `Named<OneFile>` for the files, a `Named<impl DirWrite>` for the folder), `run-keep`,
+  6 tests on output as text, real-disk tests of the openers (a named file shows nothing else in
+  its folder). Native checked in a pseudo-terminal: aligned columns there, tabs in a pipe, help
+  and usage errors from clap's builder (exit 2), a non-UTF-8 argument refused (exit 2). 8
+  dependencies.
 - **Network capabilities: built, not yet used by an app.** `Http`, `Discovery`, scopes; native
   (ureq + rustls, UDP) and sim. 7 scope tests, 4 native HTTP tests against a local server, 4 sim
   tests, SSDP answer parsing. Cackle permissions for the TLS stack (ring's C build, unsafe in
@@ -432,8 +487,8 @@ debugger comfort.
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
 3. Migrations. `sonos-tui`: done on its `ambit` branch, runs against real speakers, its
-   allowlist and permissions approved. `crossload`: the writing `Dir` is built; next a WebSocket
-   capability for the reader's upload protocol, then the move itself. Then `cli`.
+   allowlist and permissions approved. `crossload`: moved on its `ambit` branch, allowlist and
+   permissions approved; next its command line onto the `cli` platform.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.

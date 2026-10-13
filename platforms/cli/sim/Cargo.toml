@@ -1,0 +1,11 @@
+[package]
+name = "ambit-cli-sim"
+description = "Simulation backend for the cli platform: a scripted command line and input, output as text. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+ambit-caps-dir.workspace = true
+ambit-caps-sim.workspace = true
+ambit-cli.workspace = true
