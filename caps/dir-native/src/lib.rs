@@ -68,6 +68,7 @@ impl NativeDir {
     }
 
     /// Like [`NativeDir::mount`], but `path` (and its parents) is created on the first write.
+    /// Until then it reads as an empty folder.
     /// For a folder of the app's own, like where imported books go. Never for a device: an
     /// unplugged card must not turn into a folder on this computer.
     pub fn creating(path: impl AsRef<Path>) -> Self {
@@ -88,6 +89,18 @@ impl NativeDir {
                     .map_err(|e| unavailable(path, e))
             }
         }
+    }
+
+    /// A creating mount whose folder isn't made yet: it reads as an empty tree, not as an
+    /// unplugged one.
+    fn not_made_yet(&self) -> bool {
+        matches!(&self.root, Root::Mount { path, create: true }
+            if path.symlink_metadata().is_err_and(|e| e.kind() == io::ErrorKind::NotFound))
+    }
+
+    /// What a read finds in a tree that isn't made yet: the tree itself, empty.
+    fn empty(path: &RelPath) -> DirError {
+        DirError::new(DirErrorKind::NotFound, format!("{path}: not made yet"))
     }
 
     /// The tree for a write: a creating mount makes its folder first.
@@ -133,6 +146,17 @@ fn err(path: &RelPath, e: io::Error) -> DirError {
 
 impl Dir for NativeDir {
     fn metadata(&self, path: &RelPath) -> Result<Meta, DirError> {
+        if self.not_made_yet() {
+            return if path.is_root() {
+                Ok(Meta {
+                    is_dir: true,
+                    len: 0,
+                    modified: None,
+                })
+            } else {
+                Err(Self::empty(path))
+            };
+        }
         let meta = self.tree()?.metadata(rel(path)).map_err(|e| err(path, e))?;
         Ok(Meta {
             is_dir: meta.is_dir(),
@@ -142,6 +166,9 @@ impl Dir for NativeDir {
     }
 
     fn open(&self, path: &RelPath) -> Result<Box<dyn File>, DirError> {
+        if self.not_made_yet() {
+            return Err(Self::empty(path));
+        }
         let file = self.tree()?.open(rel(path)).map_err(|e| err(path, e))?;
         let meta = file.metadata().map_err(|e| err(path, e))?;
         if meta.is_dir() {
@@ -154,6 +181,13 @@ impl Dir for NativeDir {
     }
 
     fn list(&self, path: &RelPath) -> Result<Vec<Entry>, DirError> {
+        if self.not_made_yet() {
+            return if path.is_root() {
+                Ok(Vec::new())
+            } else {
+                Err(Self::empty(path))
+            };
+        }
         let dir = self.tree()?;
         let entries = if path.is_root() {
             dir.entries()

@@ -91,6 +91,26 @@ impl Args {
         values
     }
 
+    /// The value of `--name` (`--name value` or `--name=value`, the last one if repeated),
+    /// before a `--`: for the wiring to read what it needs before the app exists, like
+    /// `--config`. A quick read, not the app's parse: the app still declares the option, so
+    /// help shows it and a mistake is reported.
+    pub fn option(&self, name: &str) -> Option<&str> {
+        let flag = format!("--{name}");
+        let mut found = None;
+        let mut list = self.list.iter().skip(1);
+        while let Some(arg) = list.next() {
+            if arg == "--" {
+                break;
+            } else if *arg == flag {
+                found = list.next().map(String::as_str);
+            } else if let Some(value) = arg.strip_prefix(&flag).and_then(|r| r.strip_prefix('=')) {
+                found = Some(value);
+            }
+        }
+        found
+    }
+
     /// A capability that opens, with `open`, only what the user named. `open` is the wiring's:
     /// it decides what a name becomes (a folder to read, a folder to add to, a scoped connection)
     /// and the app's `init` shows which.
@@ -203,6 +223,24 @@ mod tests {
         let named = named.also(["saved"]);
         assert!(named.is_named("saved"));
         assert!(!Named::<()>::none().is_named("a.txt"));
+    }
+
+    #[test]
+    fn the_wiring_reads_an_option_first() {
+        let a = args(&[
+            "x",
+            "--config",
+            "a.json",
+            "books",
+            "--config=b.json",
+            "--state",
+            "s",
+        ]);
+        assert_eq!(a.option("config"), Some("b.json"));
+        assert_eq!(a.option("state"), Some("s"));
+        assert_eq!(a.option("state-dir"), None);
+        assert_eq!(args(&["x", "--", "--config", "c"]).option("config"), None);
+        assert_eq!(args(&["x", "--config"]).option("config"), None);
     }
 
     #[test]

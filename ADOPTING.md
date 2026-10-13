@@ -163,6 +163,20 @@ example. DESIGN.md "CLI platform API" has the reasoning.
   comfy-table with `default-features = false` and `set_width`. Anything that asks the terminal
   for its size (comfy-table's default `tty` feature, crossterm) won't pass. Take the width from
   `io.terminal`, and write tabs when it's `None`.
+- What the wiring needs before the app exists (`--config`, `--state-dir`, a device another
+  opener must know about): read it with `args.option("config")`. The app still declares the
+  option, so help shows it.
+- Saved defaults: the wiring loads the settings with the app's own parsing code (a pure
+  function from the file's bytes), then adds each saved value to the `Named` of its own kind
+  with `.also(..)`: the saved output folder to the output opener only.
+- Setup that can fail (no `HOME`, an unreadable settings file) mustn't stop `--help`. Hand the
+  failure to the app as a value, and let it report the failure after parsing, for the commands
+  that need it, as crossload does.
+- Openers that must know about each other (crossload: output may not be inside a Kobo) share
+  what the wiring read up front: the opener for one captures the other's named and saved
+  values.
+- A folder made on the first write (`open::creating`) reads as empty until then, not as
+  unplugged.
 - The wiring returns `ExitCode::from(done.0)` from `main`; its cackle entry needs `process` for
   that.
 

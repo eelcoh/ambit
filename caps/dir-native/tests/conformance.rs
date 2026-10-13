@@ -150,9 +150,16 @@ fn a_creating_folder_is_made_on_first_write() {
     let dir = NativeDir::creating(&at);
     let path = |p: &str| RelPath::parse(p).unwrap();
 
+    // Not made yet reads as empty, not as unplugged.
+    assert_eq!(dir.list(&RelPath::root()).unwrap(), vec![]);
+    assert!(dir.metadata(&RelPath::root()).unwrap().is_dir);
     assert_eq!(
-        dir.list(&RelPath::root()).unwrap_err().kind,
-        DirErrorKind::Unavailable
+        dir.metadata(&path("book.epub")).unwrap_err().kind,
+        DirErrorKind::NotFound
+    );
+    assert_eq!(
+        dir.open(&path("book.epub")).map(drop).unwrap_err().kind,
+        DirErrorKind::NotFound
     );
     assert!(dir.available_space(&RelPath::root()).unwrap() > 0);
     assert!(!at.exists(), "reading and asking for room create nothing");

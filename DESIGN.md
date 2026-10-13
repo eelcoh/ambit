@@ -488,7 +488,8 @@ debugger comfort.
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
 3. Migrations. `sonos-tui`: done on its `ambit` branch, runs against real speakers, its
    allowlist and permissions approved. `crossload`: moved on its `ambit` branch, allowlist and
-   permissions approved; next its command line onto the `cli` platform.
+   permissions approved; its command line is on the `cli` platform too (wiring down from about
+   2,150 lines to 680), awaiting approval of the new allowlist entries and permissions.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
    uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.
