@@ -371,7 +371,8 @@ doesn't allow.
 human-owned): `caps/`, platforms, conformance, `spec/`, `run-*`, `scripts/`,
 `cackle.toml`, `Cargo.toml`/`Cargo.lock`, `rust-toolchain.toml`, `.github/`. Listed in
 `.github/CODEOWNERS`. Protection:
-- **Merge gate**: CODEOWNERS + branch protection ("require review from Code Owners"), plus CI.
+- **Merge gate** (an option, not used here: see Next steps): CODEOWNERS + branch protection
+  ("require review from Code Owners"), plus CI.
   Only works if the agent pushes under **its own identity** (a bot account or GitHub App): the
   owner can't approve their own PR, and an agent using the owner's credentials *is* the owner.
 - **Locally**: read-only mounts or sandbox write-deny rules for those paths. Not enabled in this
@@ -500,8 +501,11 @@ debugger comfort.
 - QEMU runs on the host; `/dev/kvm` is available.
 
 ## Next steps
-1. Protection, the remaining decisions: branch protection on `main` with code-owner review, an
-   agent identity to push under, and whether to enable local write-deny rules.
+1. Protection, decided (2026-10-17): no agent identity and no merge gate; agents push to `main`
+   under the owner's account, and changes to what ships are made visible by the attack-surface
+   report and CI rather than blocked. The app repos (crossload, sonos) deny agents edits to
+   `.github/` and `.claude/` in `.claude/settings.json`: it catches mistakes, not a determined
+   agent (shell commands, and anything run in the build container, aren't covered).
 2. Upstream: commented on hermit-os/kernel#2736 (silent entropy fallback) with the x86_64
    case: the documented QEMU CPU flags lack `rdseed`. No PRs unless maintainers ask.
 3. Migrations. `sonos-tui`: done on its `ambit` branch, runs against real speakers, its
