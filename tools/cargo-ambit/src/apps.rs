@@ -48,6 +48,18 @@ impl Metadata {
         Self::run(&args)
     }
 
+    /// Resolved for one target only.
+    pub fn load_for(target: &str) -> Result<Self, String> {
+        Self::run(&[
+            "metadata",
+            "--format-version",
+            "1",
+            "--locked",
+            "--filter-platform",
+            target,
+        ])
+    }
+
     pub fn load_no_deps() -> Result<Self, String> {
         Self::run(&["metadata", "--format-version", "1", "--no-deps"])
     }
@@ -76,7 +88,7 @@ impl Metadata {
         PathBuf::from(self.0["target_directory"].as_str().unwrap_or("target"))
     }
 
-    fn packages(&self) -> BTreeMap<&str, &Value> {
+    pub fn packages(&self) -> BTreeMap<&str, &Value> {
         self.0["packages"]
             .as_array()
             .into_iter()
@@ -85,13 +97,23 @@ impl Metadata {
             .collect()
     }
 
-    fn members(&self) -> BTreeSet<&str> {
+    pub fn members(&self) -> BTreeSet<&str> {
         self.0["workspace_members"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
             .collect()
+    }
+
+    /// The resolve graph's nodes, by package id.
+    pub fn nodes(&self) -> Result<BTreeMap<&str, &Value>, String> {
+        Ok(self.0["resolve"]["nodes"]
+            .as_array()
+            .ok_or("cargo metadata: no resolve graph")?
+            .iter()
+            .filter_map(|n| Some((n["id"].as_str()?, n)))
+            .collect())
     }
 
     fn apps_dir(&self) -> PathBuf {
@@ -124,7 +146,7 @@ impl Metadata {
 const RUNTIME_APIS_OK: &[&str] = &["terminate"];
 
 /// `cackle.toml`'s `[pkg.*]` tables, if the file exists.
-fn cackle_packages(meta: &Metadata) -> Result<toml::Table, String> {
+pub fn cackle_packages(meta: &Metadata) -> Result<toml::Table, String> {
     let path = meta.workspace_root().join("cackle.toml");
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Ok(toml::Table::new());
@@ -157,12 +179,7 @@ pub fn check(meta: &Metadata) -> Result<usize, String> {
     let cackle = cackle_packages(meta)?;
     let packages = meta.packages();
     let members = meta.members();
-    let nodes: BTreeMap<&str, &Value> = meta.0["resolve"]["nodes"]
-        .as_array()
-        .ok_or("cargo metadata: no resolve graph")?
-        .iter()
-        .filter_map(|n| Some((n["id"].as_str()?, n)))
-        .collect();
+    let nodes = meta.nodes()?;
     let apps = meta.apps();
     let mut problems = 0;
 

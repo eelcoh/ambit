@@ -12,3 +12,7 @@ shortener.workspace = true
 # Deployment profile: qemu (virtio-net over PCI, ACPI, DHCP). Capability crates add the rest.
 [target.'cfg(target_os = "hermit")'.dependencies]
 hermit = { workspace = true, features = ["acpi", "pci", "dhcpv4", "virtio-net"] }
+
+# The report (cargo ambit report) resolves this program for the unikernel target.
+[package.metadata.ambit]
+target = "x86_64-unknown-hermit"

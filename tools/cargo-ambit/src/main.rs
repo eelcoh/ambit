@@ -1,6 +1,8 @@
 //! `cargo ambit`: the ambit checks for any workspace that follows the ambit layout.
 //!
 //! - `cargo ambit check`: everything CI must run before merge.
+//! - `cargo ambit report`: writes the attack-surface report (`attack-surface.md`), which `check`
+//!   requires to be up to date.
 //! - `cargo ambit init --owner @someone`: adds the human-owned files a project needs.
 //!
 //! Layout: agent-owned apps under `apps/<name>/`, each with a human-owned `allowed-deps.txt`;
@@ -10,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 mod apps;
+mod report;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -35,6 +38,7 @@ const APP_LINTS: &[&str] = &[
 ];
 
 const USAGE: &str = "usage: cargo ambit check
+       cargo ambit report
        cargo ambit init --owner @github-user";
 
 fn main() -> ExitCode {
@@ -42,6 +46,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).skip_while(|a| a == "ambit").collect();
     let result = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["check"] => check(),
+        ["report"] => report::write().map(|path| println!("wrote {}", path.display())),
         ["init", "--owner", owner] => init(owner),
         _ => Err(USAGE.to_string()),
     };
@@ -103,6 +108,7 @@ fn check() -> Result<(), String> {
         return Err("no cackle.toml: level 2 (per-crate API permissions) is required".into());
     }
     run("cargo", &["acl", "-n", "--fail-on-warnings"], &[])?;
+    report::check()?;
     println!("cargo ambit check: OK");
     Ok(())
 }

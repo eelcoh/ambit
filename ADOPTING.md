@@ -46,12 +46,13 @@ cargo ambit check                                     # lists what each app pull
 
 Then, once, as the human: review what `check` reports and put it in each
 `apps/<name>/allowed-deps.txt`; run `cargo acl` to review and accept what the platform and the
-dependencies may do. After that, `cargo ambit check` must pass before every merge; CI runs it
+dependencies may do; run `cargo ambit report`, read `attack-surface.md` and commit it. After
+that, `cargo ambit check` must pass before every merge; CI runs it
 with the cargo-ambit from the same ambit commit as `Cargo.lock`.
 
 `cargo ambit check` runs in this order and stops at the first failure: fmt, clippy on the
 workspace, clippy on each app with the app rules, tests, the app checks (allowlist, sources),
-cackle. So whether the app holds any ambient authority (level 1) is settled before the
+cackle, the attack-surface report. So whether the app holds any ambient authority (level 1) is settled before the
 allowlist and cackle come up.
 
 ## What `cargo ambit check` enforces
@@ -63,6 +64,12 @@ allowlist and cackle come up.
   `allowed-deps.txt` (and nothing stale there); every dependency from crates.io, ambit's own
   repository or the workspace; every directory under `apps/` is a workspace member.
 - cackle: per-crate API permissions on the compiled code, dependencies included.
+- `attack-surface.md` is up to date: for each program (a workspace member with a binary,
+  outside `apps/` and `tools/`), the crates that ship in it and that run at build time, their
+  versions, sources, sizes, and what `cackle.toml` lets each do. A change to any of that fails
+  the check until `cargo ambit report` is run and the file committed, so it shows as a diff in
+  the pull request. A program built for another target says so in its manifest:
+  `[package.metadata.ambit] target = "x86_64-unknown-hermit"`.
 
 ## Migrating an existing app
 In this order; each step leaves something that builds.

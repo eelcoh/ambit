@@ -404,8 +404,15 @@ debugger comfort.
 ## Attack surface
 - Host side counts too: QEMU is a lot of device-emulation code next to a 1.2 MB image, so uhyve or
   Firecracker is part of the claim, not an optional extra.
-- Measure it per build and backend: crates in the artifact, size/LOC per crate, drivers enabled,
-  host VMM. Makes the argument concrete and catches dependency creep from agents.
+- Measured per program by **`cargo ambit report`** into `attack-surface.md` (human-owned):
+  crates that ship and that run at build time, version, source, lines of Rust, what
+  `cackle.toml` grants each, and Hermit kernel features. `cargo ambit check` fails when it's
+  out of date, so dependency creep from agents shows as a diff in the pull request.
+- Limits: lines count the whole package, code for other platforms included (`linux-raw-sys`
+  is ~480k lines of bindings for every architecture), so they're a size class; the Hermit
+  kernel, built by `hermit`'s build script, isn't counted, and cackle doesn't analyse crates
+  only the hermit target uses (marked "not checked"). No binary sizes: they depend on the
+  toolchain and build profile. The host VMM isn't covered yet.
 
 ## Open questions
 - Capability granularity: narrow domain traits (`Payments`) give the best effect signatures but
@@ -462,6 +469,8 @@ debugger comfort.
   (ureq + rustls, UDP) and sim. 7 scope tests, 4 native HTTP tests against a local server, 4 sim
   tests, SSDP answer parsing. Cackle permissions for the TLS stack (ring's C build, unsafe in
   rustls' dependencies).
+- **Attack-surface report: works.** `cargo ambit report` writes `attack-surface.md`; `cargo
+  ambit check` fails when it's out of date (see "Attack surface").
 - sim `MemKv` fault injection (`Faults::All`, `Faults::Writes`), with spec tests.
 - **hermit backend: works.** `platforms/server/hermit`, `run-hermit`. `platforms/server/std` holds
   what native and hermit share: the bounded HTTP server and `StdClock`.
@@ -489,9 +498,9 @@ debugger comfort.
 3. Migrations. `sonos-tui`: done on its `ambit` branch, runs against real speakers, its
    allowlist and permissions approved. `crossload`: moved on its `ambit` branch, allowlist and
    permissions approved; its command line is on the `cli` platform too (wiring down from about
-   2,150 lines to 680), awaiting approval of the new allowlist entries and permissions.
+   2,150 lines to 680), approved and merged to its `main`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
-   uhyve/Firecracker profiles; attack-surface report; capabilities to Landlock/seccomp for native;
+   uhyve/Firecracker profiles; the host VMM in the attack-surface report; capabilities to Landlock/seccomp for native;
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.
 5. Longer horizon: **iOS and Android** as `gui`-family platforms. Capabilities map onto their
    permission models (iOS entitlements and Info.plist usage keys, Android manifest permissions),
