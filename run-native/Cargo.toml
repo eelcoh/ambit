@@ -8,3 +8,4 @@ publish.workspace = true
 [dependencies]
 ambit-server-native.workspace = true
 shortener.workspace = true
+ambit-lockdown.workspace = true

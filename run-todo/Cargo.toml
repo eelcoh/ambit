@@ -8,3 +8,4 @@ publish.workspace = true
 [dependencies]
 ambit-tui-native.workspace = true
 todo.workspace = true
+ambit-lockdown.workspace = true

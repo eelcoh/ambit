@@ -22,6 +22,15 @@ const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("kv");
 /// A single-file store (redb).
 pub struct NativeKv {
     db: Database,
+    /// For the lock.
+    path: std::path::PathBuf,
+}
+
+/// The database file, read and written.
+impl ambit_lockdown::Grants for NativeKv {
+    fn grants(&self) -> Vec<ambit_lockdown::Grant> {
+        vec![ambit_lockdown::Grant::ReadWrite(self.path.clone())]
+    }
 }
 
 impl NativeKv {
@@ -34,7 +43,10 @@ impl NativeKv {
         let txn = db.begin_write().map_err(err)?;
         txn.open_table(TABLE).map_err(err)?;
         txn.commit().map_err(err)?;
-        Ok(Self { db })
+        Ok(Self {
+            db,
+            path: path.to_path_buf(),
+        })
     }
 }
 

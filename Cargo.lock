@@ -48,6 +48,7 @@ dependencies = [
  "ambit-caps",
  "ambit-caps-conformance",
  "ambit-caps-std",
+ "ambit-lockdown",
  "getrandom 0.3.4",
  "redb",
 ]
@@ -1037,6 +1038,7 @@ dependencies = [
 name = "run-native"
 version = "0.1.0"
 dependencies = [
+ "ambit-lockdown",
  "ambit-server-native",
  "shortener",
 ]
@@ -1045,6 +1047,7 @@ dependencies = [
 name = "run-todo"
 version = "0.1.0"
 dependencies = [
+ "ambit-lockdown",
  "ambit-tui-native",
  "todo",
 ]

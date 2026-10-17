@@ -118,6 +118,15 @@ impl Lockdown {
         &self.grants
     }
 
+    /// [`Lockdown::apply`] for `main`: says on stderr, as `program`, when the lock isn't
+    /// complete on Linux. The error is for `main` to stop on.
+    pub fn apply_or_warn(self, program: &str) -> Result<(), LockError> {
+        if let Some(warning) = self.apply()?.warning() {
+            eprintln!("{program}: {warning}");
+        }
+        Ok(())
+    }
+
     /// Locks this process. Fails, and locks nothing, if a grant can't be applied (a path that
     /// isn't there is skipped: there's nothing to reach).
     pub fn apply(self) -> Result<Locked, LockError> {

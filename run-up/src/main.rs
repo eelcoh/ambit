@@ -20,16 +20,9 @@ fn main() -> ExitCode {
         ))
     });
 
-    match Lockdown::new().allow(&sites.open_all()).apply() {
-        Ok(locked) => {
-            if let Some(warning) = locked.warning() {
-                eprintln!("up: {warning}");
-            }
-        }
-        Err(e) => {
-            eprintln!("up: {e}");
-            return ExitCode::FAILURE;
-        }
+    if let Err(e) = Lockdown::new().allow(&sites.open_all()).apply_or_warn("up") {
+        eprintln!("up: {e}");
+        return ExitCode::FAILURE;
     }
 
     let app = up::init(StdClock::new(), sites);

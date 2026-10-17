@@ -189,14 +189,16 @@ example. DESIGN.md "CLI platform API" has the reasoning.
 
 ## Locking the program (Linux)
 `ambit-lockdown` turns the capabilities the wiring built into limits the operating system
-enforces (Landlock for files and TCP ports, seccomp for system calls). `run-keep` and `run-up`
-are the examples.
+enforces (Landlock for files and TCP ports, seccomp for system calls). `run-keep`, `run-up`,
+`run-todo` and `run-native` are the examples.
 - In `main`, after building the capabilities and before running the app (and before any
-  thread starts): `Lockdown::new().allow(&cap).allow(&other).apply()`. A `Named` capability
+  thread starts): `Lockdown::new().allow(&cap).allow(&other).apply_or_warn("name")?`. A `Named` capability
   passes `named.open_all()`, so what the user typed is what the lock allows.
 - Native capabilities say what they reach (`Grants`): a `NativeDir` its folder, read-write; a
   file from `open::file` that file, read-only; `NativeHttp` and `NativeWebSocket` name lookups
-  and each origin's port; `NativeDiscovery` UDP.
+  and each origin's port; `NativeDiscovery` UDP; `NativeKv` its database file. What has no
+  capability object is granted by name: `Grant::Terminal` for a terminal app,
+  `Grant::Listen(port)` for a server. Files opened before the lock (a log) stay writable.
 - Anything not granted is refused: other files (reading included), other ports, listening,
   internet sockets with no network grant, starting programs, debugging other processes,
   mounting, loading kernel code.

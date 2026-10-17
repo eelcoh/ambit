@@ -108,23 +108,27 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 
 ## `run-native`, for x86_64-unknown-linux-gnu
 
-27 crates ship: 7 from this workspace, 20 from outside it with 225,780 lines of Rust. 5 more run at build time.
+33 crates ship: 9 from this workspace, 24 from outside it with 237,151 lines of Rust. 8 more run at build time.
 
 | ships | version | from | lines | may use | build script may use |
 |---|---|---|--:|---|---|
 | ambit-caps | 0.1.0 | workspace | - |  | - |
+| ambit-caps-dir | 0.1.0 | workspace | - |  | - |
 | ambit-caps-native | 0.1.0 | workspace | - | fs | - |
 | ambit-caps-std | 0.1.0 | workspace | - |  | - |
+| ambit-lockdown | 0.1.0 | workspace | - | fs | - |
 | ambit-server | 0.1.0 | workspace | - |  | - |
 | ambit-server-native | 0.1.0 | workspace | - |  | - |
 | ambit-server-std | 0.1.0 | workspace | - | net | - |
 | shortener | 0.1.0 | workspace | - |  | - |
 | bytes | 1.12.1 | crates.io | 8,964 | unsafe, terminate | - |
 | cfg-if | 1.0.5 | crates.io | 201 |  | - |
+| enumflags2 | 0.7.12 | crates.io | 1,464 | unsafe | - |
 | getrandom | 0.3.4 | crates.io | 2,261 | unsafe | env, process |
 | http | 1.5.0 | crates.io | 13,051 | unsafe | - |
 | httparse | 1.10.1 | crates.io | 3,702 | unsafe | env, process |
 | itoa | 1.0.18 | crates.io | 433 | unsafe | - |
+| landlock | 0.4.7 | crates.io | 5,729 | unsafe, fs | - |
 | lazy_static | 1.5.1 | crates.io | 244 | unsafe | - |
 | libc | 0.2.190 | crates.io | 121,763 | unsafe | env, process |
 | log | 0.4.34 | crates.io | 5,138 | unsafe | - |
@@ -132,8 +136,10 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | once_cell | 1.21.4 | crates.io | 2,381 | unsafe | - |
 | pin-project-lite | 0.2.17 | crates.io | 1,684 | unsafe | - |
 | redb | 2.6.4 | crates.io | 18,943 | unsafe, fs | env |
+| seccompiler | 0.5.0 | crates.io | 3,549 | unsafe | - |
 | sharded-slab | 0.1.7 | crates.io | 4,813 | unsafe | - |
 | smallvec | 1.16.3 | crates.io | 3,768 | unsafe | - |
+| thiserror | 2.0.21 | crates.io | 629 |  | env, fs, process, terminate |
 | thread_local | 1.1.10 | crates.io | 1,034 | unsafe | - |
 | tracing | 0.1.44 | crates.io | 6,832 | unsafe | - |
 | tracing-core | 0.1.36 | crates.io | 5,617 | unsafe | - |
@@ -142,21 +148,26 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 
 | build time | version | from | lines | may use |
 |---|---|---|--:|---|
+| enumflags2_derive | 0.7.12 | crates.io | 313 | unsafe, proc macro |
 | proc-macro2 | 1.0.107 | crates.io | 5,596 | unsafe, env, fs, process, terminate |
 | quote | 1.0.47 | crates.io | 2,439 | env, process |
 | syn | 2.0.119 | crates.io | 47,885 | unsafe |
+| syn | 3.0.7 | crates.io | 49,486 | unsafe |
+| thiserror-impl | 2.0.21 | crates.io | 2,281 | proc macro |
 | tracing-attributes | 0.1.31 | crates.io | 1,960 | proc macro |
 | unicode-ident | 1.0.26 | crates.io | 944 | unsafe |
 
 ## `run-todo`, for x86_64-unknown-linux-gnu
 
-57 crates ship: 6 from this workspace, 51 from outside it with 952,285 lines of Rust. 22 more run at build time.
+62 crates ship: 8 from this workspace, 54 from outside it with 963,027 lines of Rust. 23 more run at build time.
 
 | ships | version | from | lines | may use | build script may use |
 |---|---|---|--:|---|---|
 | ambit-caps | 0.1.0 | workspace | - |  | - |
+| ambit-caps-dir | 0.1.0 | workspace | - |  | - |
 | ambit-caps-native | 0.1.0 | workspace | - | fs | - |
 | ambit-caps-std | 0.1.0 | workspace | - |  | - |
+| ambit-lockdown | 0.1.0 | workspace | - | fs | - |
 | ambit-tui | 0.1.0 | workspace | - |  | - |
 | ambit-tui-native | 0.1.0 | workspace | - | fs | - |
 | todo | 0.1.0 | workspace | - |  | - |
@@ -168,6 +179,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | crossterm | 0.29.0 | crates.io | 10,415 | unsafe, env, fs, process | - |
 | derive_more | 2.1.1 | crates.io | 921 |  | - |
 | either | 1.19.0 | crates.io | 2,279 | unsafe | - |
+| enumflags2 | 0.7.12 | crates.io | 1,464 | unsafe | - |
 | equivalent | 1.0.2 | crates.io | 107 |  | - |
 | errno | 0.3.14 | crates.io | 411 | unsafe | - |
 | foldhash | 0.2.0 | crates.io | 1,001 | unsafe | - |
@@ -177,6 +189,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | itertools | 0.14.0 | crates.io | 13,422 | unsafe | - |
 | itoa | 1.0.18 | crates.io | 433 | unsafe | - |
 | kasuari | 0.4.12 | crates.io | 2,739 |  | - |
+| landlock | 0.4.7 | crates.io | 5,729 | unsafe, fs | - |
 | lazy_static | 1.5.1 | crates.io | 244 | unsafe | - |
 | libc | 0.2.190 | crates.io | 121,763 | unsafe | env, process |
 | line-clipping | 0.3.8 | crates.io | 820 |  | - |
@@ -196,6 +209,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | rustix | 1.1.5 | crates.io | 66,043 | unsafe | env, fs, process |
 | ryu | 1.0.23 | crates.io | 2,620 | unsafe | - |
 | scopeguard | 1.2.0 | crates.io | 561 | unsafe | - |
+| seccompiler | 0.5.0 | crates.io | 3,549 | unsafe | - |
 | sharded-slab | 0.1.7 | crates.io | 4,813 | unsafe | - |
 | signal-hook | 0.3.18 | crates.io | 2,674 | unsafe | nothing |
 | signal-hook-mio | 0.2.5 | crates.io | 435 | net | - |
@@ -220,6 +234,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | darling_macro | 0.24.1 | crates.io | 33 | proc macro |
 | derive_more-impl | 2.1.1 | crates.io | 11,224 | proc macro |
 | document-features | 0.2.12 | crates.io | 943 | proc macro, env, fs |
+| enumflags2_derive | 0.7.12 | crates.io | 313 | unsafe, proc macro |
 | heck | 0.5.0 | crates.io | 769 |  |
 | ident_case | 1.0.1 | crates.io | 154 |  |
 | indoc | 2.0.8 | crates.io | 703 | proc macro |

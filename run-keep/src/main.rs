@@ -17,18 +17,15 @@ fn main() -> ExitCode {
     let lock = match args.option("into") {
         Some(into) => Lockdown::new().make(into),
         None => Ok(Lockdown::new()),
-    }
-    .map(|lock| lock.allow(&files.open_all()).allow(&folders.open_all()));
-    match lock.and_then(Lockdown::apply) {
-        Ok(locked) => {
-            if let Some(warning) = locked.warning() {
-                eprintln!("keep: {warning}");
-            }
-        }
-        Err(e) => {
-            eprintln!("keep: {e}");
-            return ExitCode::FAILURE;
-        }
+    };
+    let locked = lock.and_then(|lock| {
+        lock.allow(&files.open_all())
+            .allow(&folders.open_all())
+            .apply_or_warn("keep")
+    });
+    if let Err(e) = locked {
+        eprintln!("keep: {e}");
+        return ExitCode::FAILURE;
     }
 
     let app = keep::init(StdClock::new(), files, folders);
