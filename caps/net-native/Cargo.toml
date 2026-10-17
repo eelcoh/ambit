@@ -1,6 +1,6 @@
 [package]
 name = "ambit-caps-net-native"
-description = "Network capabilities on Linux/Mac: HTTP(S) via ureq + rustls, SSDP over UDP. Human-owned."
+description = "Network capabilities on Linux/Mac: HTTP(S) via ureq + rustls, SSDP over UDP, sign-in. WebSocket is ambit-caps-ws-native. Human-owned."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -9,8 +9,4 @@ publish.workspace = true
 ambit-caps-net.workspace = true
 ambit-lockdown.workspace = true
 httparse.workspace = true
-tungstenite.workspace = true
 ureq.workspace = true
-
-[dev-dependencies]
-tungstenite.workspace = true

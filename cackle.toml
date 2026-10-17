@@ -244,7 +244,8 @@ allow_unsafe = true
 [pkg.parking_lot]
 allow_unsafe = true
 
-[pkg.ambit-caps-native]
+# The single-file store. Not in any app: the wiring opens it and hands it in.
+[pkg.ambit-caps-kv-native]
 allow_apis = [
     "fs",
 ]
@@ -426,6 +427,12 @@ test.allow_apis = [
 
 # --- WebSocket (tungstenite and what it pulls in) ----------------------------------------------
 
+# Opens the TCP connection within the scope and hands it to tungstenite. Not in any app.
+[pkg.ambit-caps-ws-native]
+allow_apis = [
+    "net",
+]
+
 # Never built: zerocopy names it under cfg(any()) only to pin its version. cackle lists it from
 # the metadata anyway.
 [pkg.zerocopy-derive]
@@ -488,10 +495,6 @@ allow_unsafe = true
 allow_apis = [
     "env",
     "terminate",
-]
-test.allow_apis = [
-    "fs", "path_fs",
-    "process",
 ]
 
 # The wiring returns the exit code.

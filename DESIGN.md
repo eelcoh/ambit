@@ -321,6 +321,8 @@ let discovery = NativeDiscovery::new(Targets::new(["urn:schemas-upnp-org:device:
 ```
 caps/api/                  capability traits                           (human-owned)
 caps/{std,native,sim}/     implementations, shared by all platforms    (human-owned)
+caps/<kind>-native/        one per heavy dependency (kv: redb, dir: cap-std, net: ureq,
+                           ws: tungstenite), so a program carries only what it wires
 caps/conformance/          tests every implementation must pass        (human-owned)
 platforms/<p>/api/         entry shape: the contract                   (human-owned)
 platforms/<p>/<backend>/   event loop, IO; re-exports the caps it runs (human-owned)
@@ -476,9 +478,9 @@ debugger comfort.
     a redirect elsewhere is shown, not followed. 6 sim tests (`SimHttp::scoped` gives each
     grant its own scope over the same fake web); checked against the internet: real HTTPS,
     an expired certificate refused, a 301 not followed, aligned in a terminal, tabs in a pipe.
-  - Found by the report: `up` ships redb, cap-std and tungstenite, unused, because
-    `ambit-cli-native` and `ambit-caps-net-native` bundle them. Splitting those crates would
-    shrink every program that needs only part of them.
+  - Found by the report: `up` shipped redb, cap-std and tungstenite, unused, because the
+    native crates bundled them. Split (see "Workspace shape"): `up` went from 61 outside crates
+    to 36, `keep` lost redb.
 - **Lockdown on Linux: works for every native program.** `caps/lockdown` (`ambit-lockdown`):
   the wiring collects what each native capability reaches (`Grants`) and locks before the app
   runs. Landlock (ABI up to v9, best effort below): files and folders granted, read or

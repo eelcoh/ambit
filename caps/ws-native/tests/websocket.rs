@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use ambit_caps_net::{HttpErrorKind, Scope, WebSocket, WsMessage};
-use ambit_caps_net_native::{NativeWebSocket, WsOptions};
+use ambit_caps_ws_native::{NativeWebSocket, WsOptions};
 use tungstenite::Message;
 
 /// Accepts one connection and runs `server` on it.

@@ -5,8 +5,9 @@
 
 use std::time::Duration;
 
+use ambit_caps_kv_native::NativeKv;
 use ambit_lockdown::{Grant, Lockdown};
-use ambit_server_native::{Listen, NativeKv, OsRandom, StdClock};
+use ambit_server_native::{Listen, OsRandom, StdClock};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     ambit_server_native::init_tracing();

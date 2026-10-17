@@ -1,4 +1,4 @@
-use ambit_caps_native::{NativeKv, OsRandom, StdClock};
+use ambit_caps_native::{OsRandom, StdClock};
 
 #[test]
 fn clock() {
@@ -8,13 +8,4 @@ fn clock() {
 #[test]
 fn random() {
     ambit_caps_conformance::random(&OsRandom);
-}
-
-#[test]
-fn kv() {
-    let dir = std::env::temp_dir().join(format!("ambit-kv-{}", std::process::id()));
-    let kv = NativeKv::open(dir.join("test.redb")).unwrap();
-    ambit_caps_conformance::kv(&kv);
-    drop(kv);
-    std::fs::remove_dir_all(dir).unwrap();
 }

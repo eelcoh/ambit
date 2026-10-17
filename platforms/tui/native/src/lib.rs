@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, Once};
 use std::thread;
 use std::time::{Duration, Instant};
 
-pub use ambit_caps_native::{MemKv, NativeKv, OsRandom, StdClock};
+pub use ambit_caps_native::{MemKv, OsRandom, StdClock};
 use ambit_tui::{App, Cmd, Event, Key, KeyCode, Mods, Progress, Task, flatten};
 use ratatui_core::terminal::Terminal;
 use ratatui_crossterm::CrosstermBackend;

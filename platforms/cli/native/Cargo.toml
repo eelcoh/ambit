@@ -6,8 +6,6 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-ambit-caps-dir.workspace = true
-ambit-caps-dir-native.workspace = true
 ambit-caps-native.workspace = true
 ambit-cli.workspace = true
 # The terminal's width.

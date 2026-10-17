@@ -10,6 +10,7 @@ name = "keep"
 path = "src/main.rs"
 
 [dependencies]
+ambit-caps-dir-native.workspace = true
 ambit-cli-native.workspace = true
 keep.workspace = true
 ambit-lockdown.workspace = true

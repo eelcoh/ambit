@@ -410,3 +410,43 @@ impl DirModify for NativeDir {
         Ok(())
     }
 }
+
+/// What a name the user typed opens as: for `ambit_cli::Args::named`, a function from the text
+/// to the capability. Relative paths are relative to the directory the program was started in.
+pub mod open {
+    use super::*;
+    use ambit_caps_dir::OneFile;
+
+    /// A folder that is there now.
+    pub fn folder(value: &str) -> Result<NativeDir, String> {
+        NativeDir::open(value).map_err(|e| format!("Cannot open {value}: {e}"))
+    }
+
+    /// A folder opened again on every use: a card or a device that may come and go. Never fails
+    /// here; while nothing is there, its calls fail with `Unavailable`.
+    pub fn mount(value: &str) -> Result<NativeDir, String> {
+        Ok(NativeDir::mount(value))
+    }
+
+    /// A folder created, with its parents, on the first write: where the app puts new things.
+    pub fn creating(value: &str) -> Result<NativeDir, String> {
+        Ok(NativeDir::creating(value))
+    }
+
+    /// One file, alone: the folder it's in stays out of reach.
+    pub fn file(value: &str) -> Result<OneFile, String> {
+        let path = Path::new(value);
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| format!("{value}: not a file name"))?;
+        let parent = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p,
+            _ => Path::new("."),
+        };
+        let folder = NativeDir::open(parent).map_err(|e| format!("Cannot open {value}: {e}"))?;
+        OneFile::new(folder, name)
+            .map(|file| file.with_origin(path))
+            .map_err(|e| format!("{value}: {e}"))
+    }
+}

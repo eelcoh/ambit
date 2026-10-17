@@ -5,7 +5,8 @@
 
 use std::process::ExitCode;
 
-use ambit_cli_native::{StdClock, open};
+use ambit_caps_dir_native::open;
+use ambit_cli_native::StdClock;
 use ambit_lockdown::Lockdown;
 
 fn main() -> ExitCode {

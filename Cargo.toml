@@ -4,11 +4,13 @@ members = [
     "caps/api",
     "caps/std",
     "caps/native",
+    "caps/kv-native",
     "caps/sim",
     "caps/net",
     "caps/dir",
     "caps/dir-native",
     "caps/net-native",
+    "caps/ws-native",
     "caps/conformance",
     "caps/lockdown",
     "platforms/server/api",
@@ -45,11 +47,13 @@ publish = false
 ambit-caps = { path = "caps/api" }
 ambit-caps-std = { path = "caps/std" }
 ambit-caps-native = { path = "caps/native" }
+ambit-caps-kv-native = { path = "caps/kv-native" }
 ambit-caps-sim = { path = "caps/sim" }
 ambit-caps-net = { path = "caps/net" }
 ambit-caps-dir = { path = "caps/dir" }
 ambit-caps-dir-native = { path = "caps/dir-native" }
 ambit-caps-net-native = { path = "caps/net-native" }
+ambit-caps-ws-native = { path = "caps/ws-native" }
 ambit-caps-conformance = { path = "caps/conformance" }
 ambit-lockdown = { path = "caps/lockdown" }
 ambit-server = { path = "platforms/server/api" }

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use ambit_caps_dir::{Dir, DirErrorKind, DirWrite, RelPath};
-use ambit_cli_native::open;
+use ambit_caps_dir_native::open;
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("ambit-cli-{name}-{}", std::process::id()));

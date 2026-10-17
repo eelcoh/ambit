@@ -42,15 +42,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambit-caps-kv-native"
+version = "0.1.0"
+dependencies = [
+ "ambit-caps",
+ "ambit-caps-conformance",
+ "ambit-lockdown",
+ "redb",
+]
+
+[[package]]
 name = "ambit-caps-native"
 version = "0.1.0"
 dependencies = [
  "ambit-caps",
  "ambit-caps-conformance",
  "ambit-caps-std",
- "ambit-lockdown",
  "getrandom 0.3.4",
- "redb",
 ]
 
 [[package]]
@@ -67,7 +75,6 @@ dependencies = [
  "ambit-caps-net",
  "ambit-lockdown",
  "httparse",
- "tungstenite",
  "ureq",
 ]
 
@@ -91,6 +98,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ambit-caps-ws-native"
+version = "0.1.0"
+dependencies = [
+ "ambit-caps-net",
+ "ambit-lockdown",
+ "tungstenite",
+]
+
+[[package]]
 name = "ambit-cli"
 version = "0.1.0"
 
@@ -98,8 +114,6 @@ version = "0.1.0"
 name = "ambit-cli-native"
 version = "0.1.0"
 dependencies = [
- "ambit-caps-dir",
- "ambit-caps-dir-native",
  "ambit-caps-native",
  "ambit-cli",
  "rustix",
@@ -1029,6 +1043,7 @@ dependencies = [
 name = "run-keep"
 version = "0.1.0"
 dependencies = [
+ "ambit-caps-dir-native",
  "ambit-cli-native",
  "ambit-lockdown",
  "keep",
@@ -1038,6 +1053,7 @@ dependencies = [
 name = "run-native"
 version = "0.1.0"
 dependencies = [
+ "ambit-caps-kv-native",
  "ambit-lockdown",
  "ambit-server-native",
  "shortener",
@@ -1047,6 +1063,7 @@ dependencies = [
 name = "run-todo"
 version = "0.1.0"
 dependencies = [
+ "ambit-caps-kv-native",
  "ambit-lockdown",
  "ambit-tui-native",
  "todo",

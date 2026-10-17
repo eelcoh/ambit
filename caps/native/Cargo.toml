@@ -1,6 +1,6 @@
 [package]
 name = "ambit-caps-native"
-description = "Capabilities on Linux/Mac: OS randomness, a single-file store. Human-owned."
+description = "Capabilities on Linux/Mac: OS randomness, the clock. Human-owned."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -8,9 +8,7 @@ publish.workspace = true
 [dependencies]
 ambit-caps.workspace = true
 ambit-caps-std.workspace = true
-ambit-lockdown.workspace = true
 getrandom.workspace = true
-redb.workspace = true
 
 [dev-dependencies]
 ambit-caps-conformance.workspace = true

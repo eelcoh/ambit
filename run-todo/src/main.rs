@@ -5,8 +5,9 @@
 
 use std::path::PathBuf;
 
+use ambit_caps_kv_native::NativeKv;
 use ambit_lockdown::{Grant, Lockdown};
-use ambit_tui_native::{NativeKv, Options, StdClock};
+use ambit_tui_native::{Options, StdClock};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = data_dir().join("ambit-todo");

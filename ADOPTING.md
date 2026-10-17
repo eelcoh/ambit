@@ -159,7 +159,7 @@ example. DESIGN.md "CLI platform API" has the reasoning.
   `io.out` (the result) and `io.err` (messages). `println!` stays forbidden.
 - Paths and addresses come in as `Named<T>`: the wiring makes one per kind with
   `args.named(opener)`, and it opens only what the user typed. Openers for folders and files are
-  in `ambit_cli_native::open`; for anything else (a device, a scoped connection) the wiring
+  in `ambit_caps_dir_native::open`; for anything else (a device, a scoped connection) the wiring
   writes its own, a function from the typed text to the capability.
 - clap: use the builder API, not the derive (its generated code conflicts with the app rules),
   with `default-features = false, features = ["std", "help", "usage", "error-context",
@@ -214,6 +214,16 @@ enforces (Landlock for files and TCP ports, seccomp for system calls). `run-keep
 - The wiring depends on `ambit-lockdown`; no app does. cackle.toml needs the entries under
   "Lockdown" in ambit's (`landlock`, `seccompiler`, `enumflags2`, `ambit-lockdown`, and
   `no_auto_detect = ["landlock"]` for the `fs` and `net` APIs).
+
+## Upgrading past the crate split
+Native capabilities that pull in a large dependency have their own crate, so a program carries
+only what its wiring uses. Moving to this ambit, the wiring changes its imports:
+- `NativeKv`: from `ambit-caps-kv-native` (the backends no longer re-export it).
+- `NativeWebSocket`, `WsOptions`: from `ambit-caps-ws-native`.
+- `open::{folder, mount, creating, file}`, `NativeDir`, `OneFile`: from
+  `ambit-caps-dir-native` (and `ambit-caps-dir`), no longer from `ambit-cli-native`.
+- cackle.toml: `[pkg.ambit-caps-native]`'s grants move to `[pkg.ambit-caps-kv-native]`; add
+  `[pkg.ambit-caps-ws-native]` with `net`; drop `ambit-cli-native`'s test grants.
 
 ## Gaps found by the sonos-tui migration
 Resolved in ambit, as follows:

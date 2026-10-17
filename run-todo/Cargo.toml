@@ -6,6 +6,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+ambit-caps-kv-native.workspace = true
 ambit-tui-native.workspace = true
 todo.workspace = true
 ambit-lockdown.workspace = true
