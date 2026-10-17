@@ -68,7 +68,7 @@ allowlist and cackle come up.
   outside `apps/` and `tools/`), the crates that ship in it and that run at build time, their
   versions, sources, sizes, and what `cackle.toml` lets each do. A change to any of that fails
   the check until `cargo ambit report` is run and the file committed, so it shows as a diff in
-  the pull request. A program built for another target says so in its manifest:
+  the commit. A program built for another target says so in its manifest:
   `[package.metadata.ambit] target = "x86_64-unknown-hermit"`.
 
 ## Migrating an existing app
@@ -186,6 +186,32 @@ example. DESIGN.md "CLI platform API" has the reasoning.
   unplugged.
 - The wiring returns `ExitCode::from(done.0)` from `main`; its cackle entry needs `process` for
   that.
+
+## Locking the program (Linux)
+`ambit-lockdown` turns the capabilities the wiring built into limits the operating system
+enforces (Landlock for files and TCP ports, seccomp for system calls). `run-keep` and `run-up`
+are the examples.
+- In `main`, after building the capabilities and before running the app (and before any
+  thread starts): `Lockdown::new().allow(&cap).allow(&other).apply()`. A `Named` capability
+  passes `named.open_all()`, so what the user typed is what the lock allows.
+- Native capabilities say what they reach (`Grants`): a `NativeDir` its folder, read-write; a
+  file from `open::file` that file, read-only; `NativeHttp` and `NativeWebSocket` name lookups
+  and each origin's port; `NativeDiscovery` UDP.
+- Anything not granted is refused: other files (reading included), other ports, listening,
+  internet sockets with no network grant, starting programs, debugging other processes,
+  mounting, loading kernel code.
+- A lock covers only what exists when it's applied. A folder the app will create goes through
+  `.make(path)`, which creates it first (keep's `--into`). A mount that appears later (a Kobo
+  plugged in after start) isn't covered: grant the folder it appears in, or lock after it's
+  there.
+- Programs it starts inherit the lock, so a browser for `Authorize` won't work locked: use
+  `without_browser()`.
+- `apply` says how far it got (`Locked::warning()` for a line to print): fully, partly on an
+  older kernel, or not at all off Linux. It fails, and the wiring should stop, only when a
+  grant can't be applied.
+- The wiring depends on `ambit-lockdown`; no app does. cackle.toml needs the entries under
+  "Lockdown" in ambit's (`landlock`, `seccompiler`, `enumflags2`, `ambit-lockdown`, and
+  `no_auto_detect = ["landlock"]` for the `fs` and `net` APIs).
 
 ## Gaps found by the sonos-tui migration
 Resolved in ambit, as follows:

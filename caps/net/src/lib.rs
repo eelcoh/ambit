@@ -164,6 +164,11 @@ impl Origin {
         Self::parse(&format!("{scheme}://{authority}")).map_err(|e| format!("{url}: {e}"))
     }
 
+    /// The port: for the wiring's lock, which allows TCP by port.
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     /// Any device on the local network, by IP address, on this port.
     pub fn lan(scheme: Scheme, port: u16) -> Self {
         Self {

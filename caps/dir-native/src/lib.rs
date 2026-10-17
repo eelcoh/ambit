@@ -19,13 +19,27 @@ use ambit_caps_dir::{
 };
 use cap_std::fs::OpenOptions;
 
+/// The folder, read and written, if it's there when the lock is applied. A mount plugged in
+/// later, or a folder made later, isn't covered: grant what holds it, or make it first
+/// (`Lockdown::make`).
+impl ambit_lockdown::Grants for NativeDir {
+    fn grants(&self) -> Vec<ambit_lockdown::Grant> {
+        let (Root::Open(_, path) | Root::Mount { path, .. }) = &self.root;
+        if path.is_dir() {
+            vec![ambit_lockdown::Grant::ReadWrite(path.clone())]
+        } else {
+            Vec::new()
+        }
+    }
+}
+
 pub struct NativeDir {
     root: Root,
 }
 
 enum Root {
-    /// Opened once: the tree stays the one that was there then.
-    Open(cap_std::fs::Dir),
+    /// Opened once: the tree stays the one that was there then. The path is for the lock.
+    Open(cap_std::fs::Dir, PathBuf),
     /// Opened again on every call: whatever is at `path` now.
     Mount { path: PathBuf, create: bool },
 }
@@ -49,9 +63,10 @@ impl std::ops::Deref for Tree<'_> {
 impl NativeDir {
     /// Opens `root`, an existing directory, as the whole tree the app can see.
     pub fn open(root: impl AsRef<Path>) -> io::Result<Self> {
-        let dir = cap_std::fs::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
+        let path = root.as_ref().to_path_buf();
+        let dir = cap_std::fs::Dir::open_ambient_dir(&path, cap_std::ambient_authority())?;
         Ok(Self {
-            root: Root::Open(dir),
+            root: Root::Open(dir, path),
         })
     }
 
@@ -82,7 +97,7 @@ impl NativeDir {
 
     fn tree(&self) -> Result<Tree<'_>, DirError> {
         match &self.root {
-            Root::Open(dir) => Ok(Tree::Kept(dir)),
+            Root::Open(dir, _) => Ok(Tree::Kept(dir)),
             Root::Mount { path, .. } => {
                 cap_std::fs::Dir::open_ambient_dir(path, cap_std::ambient_authority())
                     .map(Tree::Fresh)

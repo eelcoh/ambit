@@ -12,3 +12,4 @@ path = "src/main.rs"
 [dependencies]
 ambit-cli-native.workspace = true
 keep.workspace = true
+ambit-lockdown.workspace = true

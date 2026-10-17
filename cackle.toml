@@ -519,6 +519,8 @@ include = [
     "cap-std::net",
     "mio::net",
 ]
+# landlock's own `net` module describes rules for the kernel; it opens nothing.
+no_auto_detect = ["landlock"]
 
 [api.fs]
 include = [
@@ -531,6 +533,9 @@ include = [
 exclude = [
     "std::path",
 ]
+# landlock's own `fs` module describes rules for the kernel; the paths it opens to name them
+# show up as `fs` uses of landlock below.
+no_auto_detect = ["landlock"]
 
 # Asking the disk about a path, through std::path (exists, metadata, listing a folder, following
 # links). Separate from fs only because cackle can't re-include these under the exclude above.
@@ -553,4 +558,36 @@ include = [
 [api.process]
 include = [
     "rustix::process",
+]
+
+# Lockdown (caps/lockdown): locks the native programs on Linux. Not in any app: the wiring
+# applies it. landlock and seccompiler make the system calls (unsafe); landlock opens the
+# granted paths to name them to the kernel (fs); ambit-lockdown makes a folder before locking
+# (fs) and reads which machine it runs on (env::consts, no environment).
+[pkg.enumflags2_derive]
+allow_proc_macro = true
+allow_unsafe = true
+
+[pkg.enumflags2]
+allow_unsafe = true
+
+[pkg.seccompiler]
+allow_unsafe = true
+
+[pkg.landlock]
+allow_unsafe = true
+allow_apis = [
+    "fs",
+]
+
+[pkg.ambit-lockdown]
+allow_apis = [
+    "fs",
+]
+# The tests run each case in a child process and try files, sockets and programs from inside.
+test.allow_apis = [
+    "env",
+    "fs", "path_fs",
+    "net",
+    "process",
 ]

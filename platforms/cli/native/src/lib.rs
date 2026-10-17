@@ -92,6 +92,8 @@ pub mod open {
             _ => Path::new("."),
         };
         let folder = NativeDir::open(parent).map_err(|e| format!("Cannot open {value}: {e}"))?;
-        OneFile::new(folder, name).map_err(|e| format!("{value}: {e}"))
+        OneFile::new(folder, name)
+            .map(|file| file.with_origin(path))
+            .map_err(|e| format!("{value}: {e}"))
     }
 }

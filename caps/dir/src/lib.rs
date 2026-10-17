@@ -120,6 +120,7 @@ impl<T: Dir + ?Sized> Dir for Arc<T> {
 pub struct OneFile {
     folder: Box<dyn Dir>,
     name: RelPath,
+    origin: Option<std::path::PathBuf>,
 }
 
 impl OneFile {
@@ -128,7 +129,20 @@ impl OneFile {
         Ok(Self {
             folder: Box::new(folder),
             name: RelPath::new([name])?,
+            origin: None,
         })
+    }
+
+    /// Notes where the file is on this computer, for the wiring's lock (`ambit-lockdown`) to let
+    /// the program read it. Set by the native wiring; it opens nothing.
+    pub fn with_origin(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        self.origin = Some(path.into());
+        self
+    }
+
+    /// Where the file is on this computer, if the wiring said.
+    pub fn origin(&self) -> Option<&std::path::Path> {
+        self.origin.as_deref()
     }
 
     /// The file's path inside this tree: its name.

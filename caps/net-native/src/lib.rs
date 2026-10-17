@@ -16,6 +16,45 @@ use ambit_caps_net::{
     HttpErrorKind, Params, Request, Response, Scope, Targets, WebSocket, WsConnection, WsMessage,
     is_lan, parse_query,
 };
+use ambit_lockdown::{Grant, Grants};
+
+/// Each origin's port, and name lookups. Which hosts on those ports is the scope's job: the lock
+/// allows TCP by port only.
+fn scope_grants(scope: &Scope) -> Vec<Grant> {
+    let mut grants = vec![Grant::Resolve];
+    grants.extend(scope.origins().iter().map(|o| Grant::Connect(o.port())));
+    grants
+}
+
+impl Grants for NativeHttp {
+    fn grants(&self) -> Vec<Grant> {
+        scope_grants(&self.scope)
+    }
+}
+
+impl Grants for NativeWebSocket {
+    fn grants(&self) -> Vec<Grant> {
+        scope_grants(&self.scope)
+    }
+}
+
+/// SSDP is UDP multicast on the local network.
+impl Grants for NativeDiscovery {
+    fn grants(&self) -> Vec<Grant> {
+        vec![Grant::Udp]
+    }
+}
+
+/// Listens on its loopback port while waiting; opening the browser starts a program.
+impl Grants for NativeAuthorize {
+    fn grants(&self) -> Vec<Grant> {
+        let mut grants = vec![Grant::Listen(self.port)];
+        if self.browser {
+            grants.push(Grant::StartPrograms);
+        }
+        grants
+    }
+}
 
 pub struct HttpOptions {
     /// For the whole request: connect, send and receive.

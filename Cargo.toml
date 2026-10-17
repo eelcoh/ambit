@@ -10,6 +10,7 @@ members = [
     "caps/dir-native",
     "caps/net-native",
     "caps/conformance",
+    "caps/lockdown",
     "platforms/server/api",
     "platforms/server/std",
     "platforms/server/native",
@@ -50,6 +51,7 @@ ambit-caps-dir = { path = "caps/dir" }
 ambit-caps-dir-native = { path = "caps/dir-native" }
 ambit-caps-net-native = { path = "caps/net-native" }
 ambit-caps-conformance = { path = "caps/conformance" }
+ambit-lockdown = { path = "caps/lockdown" }
 ambit-server = { path = "platforms/server/api" }
 ambit-server-std = { path = "platforms/server/std" }
 ambit-server-native = { path = "platforms/server/native" }
@@ -78,6 +80,11 @@ getrandom = "0.3"
 # Kernel features are added per crate; see DESIGN.md "Hermit: minimal by default".
 hermit = { git = "https://github.com/hermit-os/hermit-rs.git", tag = "hermit-0.13.2", default-features = false }
 http = "1"
+# Lockdown (caps/lockdown): Landlock for files and TCP ports, seccomp for system calls. libc for
+# the system call numbers, the version the tree already has.
+landlock = "0.4.7"
+libc = "0.2"
+seccompiler = "0.5"
 httparse = "1"
 ratatui-core = "0.1.2"
 ratatui-crossterm = { version = "0.1.2", default-features = false, features = ["crossterm_0_29"] }

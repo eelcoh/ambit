@@ -83,7 +83,7 @@ is defence in depth on every backend, not just the unikernel:
 | wasi             | the component's imports                          |
 | macOS            | App Sandbox entitlements                         |
 | Linux desktop    | Flatpak permissions/portals                      |
-| Linux native     | Landlock + seccomp profile                       |
+| Linux native     | Landlock + seccomp (`caps/lockdown`; cli done)   |
 
 With hermit, the capability list doubles as the bill of materials: no storage capability, no
 virtio-fs driver in the image.
@@ -408,7 +408,7 @@ debugger comfort.
 - Measured per program by **`cargo ambit report`** into `attack-surface.md` (human-owned):
   crates that ship and that run at build time, version, source, lines of Rust, what
   `cackle.toml` grants each, and Hermit kernel features. `cargo ambit check` fails when it's
-  out of date, so dependency creep from agents shows as a diff in the pull request.
+  out of date, so dependency creep from agents shows as a change to that file in the commit.
 - Limits: lines count the whole package, code for other platforms included (`linux-raw-sys`
   is ~480k lines of bindings for every architecture), so they're a size class; the Hermit
   kernel, built by `hermit`'s build script, isn't counted, and cackle doesn't analyse crates
@@ -479,6 +479,17 @@ debugger comfort.
   - Found by the report: `up` ships redb, cap-std and tungstenite, unused, because
     `ambit-cli-native` and `ambit-caps-net-native` bundle them. Splitting those crates would
     shrink every program that needs only part of them.
+- **Lockdown on Linux: works for the cli programs.** `caps/lockdown` (`ambit-lockdown`):
+  the wiring collects what each native capability reaches (`Grants`) and locks before the app
+  runs. Landlock (ABI up to v9, best effort below): files and folders granted, read or
+  read-write, nothing else readable; TCP connect and listen by port; signals and abstract
+  sockets scoped. seccomp: no `execve` unless granted, no ptrace, mount, namespaces, bpf,
+  io_uring, kernel modules or keys; no internet sockets without a network grant. `keep` (named
+  files read-only, named folders, `--into` made first) and `up` (each named origin's port and
+  the resolver) run locked; 3 tests run locked children that try what they mustn't. Fully
+  enforced on this machine's kernel (7.2). Limits: UDP isn't port-limited (Landlock has no UDP
+  rules), TCP is by port not host (the scope does hosts), a mount that appears after the lock
+  isn't covered.
 - **Attack-surface report: works.** `cargo ambit report` writes `attack-surface.md`; `cargo
   ambit check` fails when it's out of date (see "Attack surface").
 - sim `MemKv` fault injection (`Faults::All`, `Faults::Writes`), with spec tests.
@@ -513,7 +524,8 @@ debugger comfort.
    permissions approved; its command line is on the `cli` platform too (wiring down from about
    2,150 lines to 680), approved and merged to its `main`.
 4. Later: outbound connections + TLS, durable storage on hermit (virtio-fs/block),
-   uhyve/Firecracker profiles; the host VMM in the attack-surface report; capabilities to Landlock/seccomp for native;
+   uhyve/Firecracker profiles; the host VMM in the attack-surface report; the lock for the tui and server
+   programs (the cli ones are locked);
    `gui`. Tokio on Hermit only if the blocking server turns out too limiting.
 5. Longer horizon: **iOS and Android** as `gui`-family platforms. Capabilities map onto their
    permission models (iOS entitlements and Info.plist usage keys, Android manifest permissions),

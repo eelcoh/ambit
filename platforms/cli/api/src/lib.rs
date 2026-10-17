@@ -167,6 +167,15 @@ impl<T> Named<T> {
         self.values.contains(value)
     }
 
+    /// Opens every named value that opens, now: for the wiring to see what the app could reach,
+    /// and lock the program to that before it runs. The app opens its own when it needs them.
+    pub fn open_all(&self) -> Vec<T> {
+        self.values
+            .iter()
+            .filter_map(|value| (self.open)(value).ok())
+            .collect()
+    }
+
     /// Opens `value`, exactly as the user typed it.
     pub fn open(&self, value: &str) -> Result<T, NamedError> {
         if !self.is_named(value) {
@@ -220,6 +229,7 @@ mod tests {
                 "{value}"
             );
         }
+        assert_eq!(named.open_all().len(), 7);
         let named = named.also(["saved"]);
         assert!(named.is_named("saved"));
         assert!(!Named::<()>::none().is_named("a.txt"));
