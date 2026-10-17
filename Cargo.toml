@@ -24,11 +24,13 @@ members = [
     "apps/shortener",
     "apps/todo",
     "apps/keep",
+    "apps/up",
     "spec",
     "run-native",
     "run-hermit",
     "run-todo",
     "run-keep",
+    "run-up",
     "tools/cargo-ambit",
 ]
 exclude = ["spikes"]
@@ -62,6 +64,7 @@ ambit-cli-native = { path = "platforms/cli/native" }
 ambit-cli-sim = { path = "platforms/cli/sim" }
 todo = { path = "apps/todo" }
 keep = { path = "apps/keep" }
+up = { path = "apps/up" }
 
 cap-std = "4.0.3"
 # Argument parsing for the example cli app. No colour, no terminal or environment queries: those

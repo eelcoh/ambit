@@ -465,10 +465,19 @@ debugger comfort.
   its folder). Native checked in a pseudo-terminal: aligned columns there, tabs in a pipe, help
   and usage errors from clap's builder (exit 2), a non-UTF-8 argument refused (exit 2). 8
   dependencies.
-- **Network capabilities: built, not yet used by an app.** `Http`, `Discovery`, scopes; native
-  (ureq + rustls, UDP) and sim. 7 scope tests, 4 native HTTP tests against a local server, 4 sim
+- **Network capabilities: works, used by `apps/up`.** `Http`, `Discovery`, scopes; native
+  (ureq + rustls, UDP) and sim. 8 scope tests, 4 native HTTP tests against a local server, 4 sim
   tests, SSDP answer parsing. Cackle permissions for the TLS stack (ring's C build, unsafe in
-  rustls' dependencies).
+  rustls' dependencies), and `net`/`env` for ureq at run time (found by `up`, the first program
+  here that sends requests; sonos and crossload had added it themselves).
+  - `apps/up` (cli): `up URL...` says whether each address answers. Each address the user typed
+    reaches its own site and nothing else (`Origin::of(url)` in the wiring, through `Named`), so
+    a redirect elsewhere is shown, not followed. 6 sim tests (`SimHttp::scoped` gives each
+    grant its own scope over the same fake web); checked against the internet: real HTTPS,
+    an expired certificate refused, a 301 not followed, aligned in a terminal, tabs in a pipe.
+  - Found by the report: `up` ships redb, cap-std and tungstenite, unused, because
+    `ambit-cli-native` and `ambit-caps-net-native` bundle them. Splitting those crates would
+    shrink every program that needs only part of them.
 - **Attack-surface report: works.** `cargo ambit report` writes `attack-surface.md`; `cargo
   ambit check` fails when it's out of date (see "Attack surface").
 - sim `MemKv` fault injection (`Faults::All`, `Faults::Writes`), with spec tests.

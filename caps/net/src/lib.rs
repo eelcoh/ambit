@@ -150,6 +150,20 @@ impl Origin {
         Ok(Self { scheme, host, port })
     }
 
+    /// The origin of a full URL (`https://example.com/a?b` is `https://example.com`): for a
+    /// scope that reaches the address the user typed and nothing else on the web. A wildcard
+    /// host is refused: a URL names one host.
+    pub fn of(url: &str) -> Result<Self, String> {
+        let uri: http::Uri = url.parse().map_err(|e| format!("{url}: {e}"))?;
+        let (Some(scheme), Some(authority)) = (uri.scheme_str(), uri.authority()) else {
+            return Err(format!("{url}: not a full URL, like https://example.com"));
+        };
+        if authority.host().contains('*') {
+            return Err(format!("{url}: no wildcards in a URL"));
+        }
+        Self::parse(&format!("{scheme}://{authority}")).map_err(|e| format!("{url}: {e}"))
+    }
+
     /// Any device on the local network, by IP address, on this port.
     pub fn lan(scheme: Scheme, port: u16) -> Self {
         Self {
@@ -391,6 +405,27 @@ mod tests {
         assert!(!allowed(&scope, "https://api.spotify.com.evil.com/"));
         assert!(!allowed(&scope, "https://evil.com/api.spotify.com"));
         assert!(!allowed(&scope, "http://10.0.0.5/"));
+    }
+
+    #[test]
+    fn a_url_grants_its_own_origin_only() {
+        let scope = Scope::new([Origin::of("https://Example.com/a/b?c=d#e").unwrap()]);
+        assert!(allowed(&scope, "https://example.com/"));
+        assert!(allowed(&scope, "https://example.com/other"));
+        assert!(!allowed(&scope, "http://example.com/"));
+        assert!(!allowed(&scope, "https://www.example.com/"));
+        let scope = Scope::new([Origin::of("http://192.168.1.10:8080/status").unwrap()]);
+        assert!(allowed(&scope, "http://192.168.1.10:8080/"));
+        assert!(!allowed(&scope, "http://192.168.1.11:8080/"));
+        for url in [
+            "example.com",
+            "/a/b",
+            "ftp://example.com/",
+            "https://*.example.com/",
+            "https://user@example.com/",
+        ] {
+            assert!(Origin::of(url).is_err(), "{url}");
+        }
     }
 
     #[test]

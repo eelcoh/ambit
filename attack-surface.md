@@ -221,3 +221,90 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | syn | 3.0.7 | crates.io | 49,486 | unsafe |
 | thiserror-impl | 2.0.21 | crates.io | 2,281 | proc macro |
 | unicode-ident | 1.0.26 | crates.io | 944 | unsafe |
+
+## `up` (run-up, for x86_64-unknown-linux-gnu)
+
+68 crates ship: 10 from this workspace, 58 from outside it with 981,221 lines of Rust. 9 more run at build time.
+
+| ships | version | from | lines | may use | build script may use |
+|---|---|---|--:|---|---|
+| ambit-caps | 0.1.0 | workspace | - |  | - |
+| ambit-caps-dir | 0.1.0 | workspace | - |  | - |
+| ambit-caps-dir-native | 0.1.0 | workspace | - | fs, path_fs | - |
+| ambit-caps-native | 0.1.0 | workspace | - | fs | - |
+| ambit-caps-net | 0.1.0 | workspace | - |  | - |
+| ambit-caps-net-native | 0.1.0 | workspace | - | net | - |
+| ambit-caps-std | 0.1.0 | workspace | - |  | - |
+| ambit-cli | 0.1.0 | workspace | - |  | - |
+| ambit-cli-native | 0.1.0 | workspace | - | env, terminate | - |
+| up | 0.1.0 | workspace | - |  | - |
+| ambient-authority | 0.0.2 | crates.io | 59 |  | - |
+| anstyle | 1.0.14 | crates.io | 1,472 | unsafe | - |
+| base64 | 0.23.1 | crates.io | 7,747 |  | - |
+| bitflags | 2.13.2 | crates.io | 3,131 | unsafe | - |
+| block-buffer | 0.10.4 | crates.io | 375 | unsafe | - |
+| bytes | 1.12.1 | crates.io | 8,964 | unsafe, terminate | - |
+| cap-primitives | 4.0.3 | crates.io | 10,312 | unsafe, fs | env, process |
+| cap-std | 4.0.3 | crates.io | 5,125 | unsafe, fs | env, process |
+| cfg-if | 1.0.5 | crates.io | 201 |  | - |
+| clap | 4.6.7 | crates.io | 1,676 |  | - |
+| clap_builder | 4.6.7 | crates.io | 26,792 |  | - |
+| clap_lex | 1.1.1 | crates.io | 743 | unsafe | - |
+| cpufeatures | 0.2.17 | crates.io | 609 | unsafe | - |
+| crypto-common | 0.1.7 | crates.io | 265 |  | - |
+| data-encoding | 2.11.1 | crates.io | 2,672 | unsafe | - |
+| digest | 0.10.7 | crates.io | 1,915 |  | - |
+| errno | 0.3.14 | crates.io | 411 | unsafe | - |
+| fs-set-times | 0.20.3 | crates.io | 296 | unsafe | - |
+| generic-array | 0.14.7 | crates.io | 1,768 | unsafe | nothing |
+| getrandom | 0.2.17 | crates.io | 1,614 | unsafe | - |
+| getrandom | 0.3.4 | crates.io | 2,261 | unsafe | env, process |
+| http | 1.5.0 | crates.io | 13,051 | unsafe | - |
+| httparse | 1.10.1 | crates.io | 3,702 | unsafe | env, process |
+| io-extras | 0.19.0 | crates.io | 3,576 | unsafe | env, process |
+| io-lifetimes | 2.0.4 | crates.io | 1,390 | unsafe | env, process |
+| io-lifetimes | 3.0.1 | crates.io | 1,390 | unsafe | env, process |
+| ipnet | 2.12.2 | crates.io | 3,693 |  | - |
+| itoa | 1.0.18 | crates.io | 433 | unsafe | - |
+| libc | 0.2.190 | crates.io | 121,763 | unsafe | env, process |
+| linux-raw-sys | 0.12.1 | crates.io | 479,351 | unsafe | - |
+| log | 0.4.34 | crates.io | 5,138 | unsafe | - |
+| maybe-owned | 0.3.4 | crates.io | 927 |  | - |
+| once_cell | 1.21.4 | crates.io | 2,381 | unsafe | - |
+| percent-encoding | 2.3.2 | crates.io | 621 | unsafe | - |
+| ppv-lite86 | 0.2.21 | crates.io | 3,642 | unsafe | - |
+| rand | 0.9.5 | crates.io | 9,276 | unsafe | - |
+| rand_chacha | 0.9.0 | crates.io | 945 |  | - |
+| rand_core | 0.9.5 | crates.io | 1,509 |  | - |
+| redb | 2.6.4 | crates.io | 18,943 | unsafe, fs | env |
+| ring | 0.17.14 | crates.io | 22,730 | unsafe | env, fs, process |
+| rustix | 1.1.5 | crates.io | 66,043 | unsafe | env, fs, process |
+| rustix-linux-procfs | 0.1.1 | crates.io | 442 | unsafe | - |
+| rustls | 0.23.45 | crates.io | 42,822 |  | nothing |
+| rustls-pki-types | 1.15.1 | crates.io | 3,682 | unsafe | - |
+| rustls-webpki | 0.103.15 | crates.io | 8,938 |  | - |
+| sha1 | 0.10.7 | crates.io | 717 | unsafe | - |
+| strsim | 0.11.1 | crates.io | 1,109 |  | - |
+| subtle | 2.6.1 | crates.io | 931 | unsafe | - |
+| thiserror | 2.0.21 | crates.io | 629 |  | env, fs, process, terminate |
+| tungstenite | 0.29.0 | crates.io | 4,817 | unsafe | - |
+| typenum | 1.20.1 | crates.io | 17,271 |  | - |
+| untrusted | 0.9.0 | crates.io | 367 |  | - |
+| ureq | 3.4.2 | crates.io | 14,502 | env, net | - |
+| ureq-proto | 0.6.4 | crates.io | 9,034 |  | - |
+| utf8-zero | 0.8.1 | crates.io | 530 | unsafe | - |
+| webpki-roots | 1.0.9 | crates.io | 4,479 |  | - |
+| zerocopy | 0.8.62 | crates.io | 31,066 | unsafe | env, fs, process |
+| zeroize | 1.9.1 | crates.io | 973 | unsafe | - |
+
+| build time | version | from | lines | may use |
+|---|---|---|--:|---|
+| cc | 1.7.0 | crates.io | 8,585 | unsafe |
+| find-msvc-tools | 0.1.14 | crates.io | 2,499 | unsafe |
+| proc-macro2 | 1.0.107 | crates.io | 5,596 | unsafe, env, fs, process, terminate |
+| quote | 1.0.47 | crates.io | 2,439 | env, process |
+| shlex | 2.0.1 | crates.io | 771 | unsafe |
+| syn | 3.0.7 | crates.io | 49,486 | unsafe |
+| thiserror-impl | 2.0.21 | crates.io | 2,281 | proc macro |
+| unicode-ident | 1.0.26 | crates.io | 944 | unsafe |
+| version_check | 0.9.5 | crates.io | 1,146 | env, process |

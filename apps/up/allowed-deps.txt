@@ -1,0 +1,14 @@
+# Human-owned. Every crate in the app's normal (non-dev) dependency tree: what ends up in the
+# artifact, plus proc macros, which run at build time with full authority.
+# Checked by cargo ambit check.
+ambit-caps
+ambit-caps-net
+ambit-cli
+anstyle
+bytes
+clap
+clap_builder
+clap_lex
+http
+itoa
+strsim

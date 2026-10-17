@@ -329,8 +329,11 @@ test.allow_apis = [
     "process",
 ]
 
+# The HTTP client inside NativeHttp: it opens the connections, so cackle sees net here. env is
+# its proxy-from-environment code, which NativeHttp switches off. Not in any app: apps depend on
+# ambit-caps-net, which has no client.
 [pkg.ureq]
-from.test.allow_apis = [
+allow_apis = [
     "env",
     "net",
 ]
@@ -493,6 +496,11 @@ test.allow_apis = [
 
 # The wiring returns the exit code.
 [pkg.run-keep]
+allow_apis = [
+    "process",
+]
+
+[pkg.run-up]
 allow_apis = [
     "process",
 ]

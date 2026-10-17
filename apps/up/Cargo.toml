@@ -1,0 +1,16 @@
+[package]
+name = "up"
+description = "Example cli app: checks whether web addresses answer. Agent-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# New dependencies must also be added to allowed-deps.txt (human-owned).
+[dependencies]
+ambit-caps.workspace = true
+ambit-caps-net.workspace = true
+ambit-cli.workspace = true
+clap.workspace = true
+
+[dev-dependencies]
+ambit-cli-sim.workspace = true

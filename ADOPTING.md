@@ -132,12 +132,12 @@ In this order; each step leaves something that builds.
    (`.../build.rs`) says it belongs in `build.allow_apis`, not `allow_apis`.
 
    Two things to expect when copying ambit's `cackle.toml` (found moving sonos-tui to 81cad7b):
-   - **Run-time grants are missing.** No binary in ambit wires `NativeDir`, `NativeAuthorize` or
-     `NativeHttp`, so ambit's file grants their APIs only to tests (`test.allow_apis`,
-     `from.test.allow_apis`). A project whose wiring uses them needs `fs` for
-     `ambit-caps-dir-native`, `cap-std` and `cap-primitives`; `process` for
-     `ambit-caps-net-native` (the browser for `Authorize`); `net` and `env` for `ureq` (`env`
-     is its proxy-from-environment code, which `NativeHttp` switches off).
+   - **One run-time grant is missing.** No binary in ambit wires `NativeAuthorize`, so ambit's
+     file grants `process` (the browser it opens) to `ambit-caps-net-native` only in tests; a
+     project whose wiring uses it adds that. The others are in ambit's file now that its
+     examples use them: `fs` for `ambit-caps-dir-native`, `cap-std` and `cap-primitives`
+     (`keep`), `net` and `env` for `ureq` (`up`; `env` is its proxy-from-environment code,
+     which `NativeHttp` switches off).
    - **Entries for crates you don't build fail the check.** With `--fail-on-warnings`, cackle
      rejects config for packages outside the tree (`cargo-ambit`, `run-todo`,
      `ambit-server-std`, ...) and grants nothing uses. Delete exactly what it names.

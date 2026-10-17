@@ -183,6 +183,15 @@ impl SimHttp {
         }
     }
 
+    /// The same fake servers and the same record of what was sent, behind a different scope:
+    /// what the wiring hands out when each grant has its own scope.
+    pub fn scoped(&self, scope: Scope) -> Self {
+        Self {
+            scope: Arc::new(scope),
+            ..self.clone()
+        }
+    }
+
     /// Answers `method uri` (exact, query included) with `status` and `body`.
     pub fn respond(&self, method: &str, uri: &str, status: u16, body: impl Into<Vec<u8>>) {
         let (method, uri, body) = (method.to_string(), uri.to_string(), body.into());

@@ -1,0 +1,16 @@
+[package]
+name = "run-up"
+description = "Wiring: the up example on the native cli backend. Human-owned."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "up"
+path = "src/main.rs"
+
+[dependencies]
+ambit-caps-net.workspace = true
+ambit-caps-net-native.workspace = true
+ambit-cli-native.workspace = true
+up.workspace = true

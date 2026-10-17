@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use ambit_caps_dir::OneFile;
-pub use ambit_caps_sim::{MemKv, SeededRandom, SimClock, SimDir};
+pub use ambit_caps_sim::{MemKv, SeededRandom, SimClock, SimDir, SimHttp};
 use ambit_cli::{App, Args, Io, Terminal};
 
 /// The command line `list`, the program name first: `args(&["keep", "a.txt"])`.
