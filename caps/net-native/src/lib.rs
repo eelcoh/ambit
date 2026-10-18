@@ -8,12 +8,13 @@
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, UdpSocket};
-use std::process::{Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use ambit_caps_net::{
     AuthError, AuthErrorKind, Authorize, Device, Discovery, DiscoveryError, Http, HttpError,
-    HttpErrorKind, Params, Request, Response, Scope, Targets, is_lan, parse_query,
+    HttpErrorKind, Origin, Params, Request, Response, Scope, Targets, is_lan, parse_query,
 };
 use ambit_lockdown::{Grant, Grants};
 
@@ -38,14 +39,11 @@ impl Grants for NativeDiscovery {
     }
 }
 
-/// Listens on its loopback port while waiting; opening the browser starts a program.
+/// Listens on its loopback port while waiting. The browser is opened by its helper, outside the
+/// lock, so no program is started from inside.
 impl Grants for NativeAuthorize {
     fn grants(&self) -> Vec<Grant> {
-        let mut grants = vec![Grant::Listen(self.port)];
-        if self.browser {
-            grants.push(Grant::StartPrograms);
-        }
-        grants
+        vec![Grant::Listen(self.port)]
     }
 }
 
@@ -219,10 +217,14 @@ fn parse(datagram: &[u8], addr: IpAddr, target: &str) -> Option<Device> {
 
 /// The loopback flow: opens the system browser (`xdg-open` on Linux, `open` on macOS) and
 /// listens on `127.0.0.1:<port>` for the one redirect back, for as long as `authorize` waits.
+///
+/// The browser is opened by a helper started with the capability, so make it before the lock:
+/// the helper stays outside the lock, and the program needs no grant to start programs. The
+/// helper only opens addresses at the scope's exact origins, and checks each one again itself.
 pub struct NativeAuthorize {
     scope: Scope,
     port: u16,
-    browser: bool,
+    browser: Option<Mutex<Opener>>,
 }
 
 const CALLBACK_PATH: &str = "/callback";
@@ -233,17 +235,30 @@ impl NativeAuthorize {
     /// `scope`: what may be opened in the browser (the provider's authorize page). `port`: the
     /// loopback port registered with the provider.
     pub fn new(scope: Scope, port: u16) -> Self {
+        let program = if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
+        let browser = Opener::start(program, &scope).map(Mutex::new);
         Self {
             scope,
             port,
-            browser: true,
+            browser,
         }
     }
 
     /// Doesn't start a browser: the user opens the URL the app shows. For remote sessions,
     /// and for tests.
     pub fn without_browser(mut self) -> Self {
-        self.browser = false;
+        self.browser = None;
+        self
+    }
+
+    /// Opens addresses with `program` (given the address as its one argument) instead of the
+    /// system browser.
+    pub fn opening_with(mut self, program: impl AsRef<std::ffi::OsStr>) -> Self {
+        self.browser = Opener::start(program, &self.scope).map(Mutex::new);
         self
     }
 }
@@ -259,8 +274,8 @@ impl Authorize for NativeAuthorize {
         // Listen before opening the browser, so the redirect can't arrive first.
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, self.port)).map_err(io)?;
         listener.set_nonblocking(true).map_err(io)?;
-        if self.browser {
-            open_browser(url);
+        if let Some(browser) = &self.browser {
+            browser.lock().unwrap_or_else(|e| e.into_inner()).open(url);
         }
         let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
@@ -316,28 +331,167 @@ fn callback(conn: &mut std::net::TcpStream) -> Option<Params> {
     Some(parse_query(query))
 }
 
-/// Best effort; the app shows the URL as well. Output goes nowhere: the terminal is the app's.
-fn open_browser(url: &str) {
-    let opener = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    let child = Command::new(opener)
-        .arg(url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
-    if let Ok(mut child) = child {
-        // Reap it when it exits.
-        std::thread::spawn(move || child.wait());
+/// The helper that opens addresses in the browser: a shell reading one address per line, which
+/// runs the opener for those that start with one of its prefixes (followed by nothing, `/`, `?`
+/// or `#`) and ignores the rest. Started before the lock, it stays outside it; the program can
+/// still ask it for anything, so the check is the helper's own. The prefixes and the address are
+/// arguments and input, never part of the script.
+struct Opener {
+    child: Child,
+    input: Option<ChildStdin>,
+}
+
+const OPENER_SCRIPT: &str = r#"opener=$1; shift
+while IFS= read -r url; do
+  for prefix in "$@"; do
+    case $url in
+      "$prefix" | "$prefix"/* | "$prefix"\?* | "$prefix"\#*)
+        "$opener" "$url" </dev/null >/dev/null 2>&1 &
+        break ;;
+    esac
+  done
+done"#;
+
+impl Opener {
+    /// `None` if there's nothing to open (no exact origin) or no shell: the app shows the URL.
+    fn start(program: impl AsRef<std::ffi::OsStr>, scope: &Scope) -> Option<Self> {
+        let prefixes = opener_prefixes(scope);
+        if prefixes.is_empty() {
+            return None;
+        }
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(OPENER_SCRIPT)
+            .arg("sh")
+            .arg(program)
+            .args(prefixes)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+        let input = child.stdin.take();
+        Some(Self { child, input })
     }
+
+    /// Best effort; the app shows the URL as well.
+    fn open(&mut self, url: &str) {
+        if url.contains(['\n', '\r']) {
+            return;
+        }
+        if let Some(input) = &mut self.input {
+            let _ = writeln!(input, "{url}").and_then(|()| input.flush());
+        }
+    }
+}
+
+impl Drop for Opener {
+    /// Closing its input ends the helper.
+    fn drop(&mut self) {
+        drop(self.input.take());
+        let _ = self.child.wait();
+    }
+}
+
+/// How the scope's exact origins start a URL: `https://host` for the default port, and
+/// `https://host:port` always. Subdomain and local-network origins name no single address, so
+/// the helper opens nothing there.
+fn opener_prefixes(scope: &Scope) -> Vec<String> {
+    let mut prefixes = Vec::new();
+    for origin in scope.origins() {
+        let shown = origin.to_string();
+        let Some((scheme, rest)) = shown.split_once("://") else {
+            continue;
+        };
+        if rest.starts_with('*') || rest.starts_with('<') {
+            continue;
+        }
+        if Origin::parse(&format!("{scheme}://{rest}")).ok().as_ref() != Some(origin) {
+            continue;
+        }
+        if let Some((host, port)) = rest.rsplit_once(':') {
+            let default = if scheme == "https" { "443" } else { "80" };
+            if port == default {
+                prefixes.push(format!("{scheme}://{host}"));
+            }
+        }
+        prefixes.push(shown);
+    }
+    prefixes
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fake browser: a script that writes each address it's given to `opened`.
+    #[cfg(unix)]
+    fn fake_browser(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("ambit-opener-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let opened = dir.join("opened");
+        let script = dir.join("browser");
+        std::fs::write(
+            &script,
+            format!("#!/bin/sh\necho \"$1\" >> '{}'\n", opened.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (script, opened)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_helper_opens_only_addresses_at_its_exact_origins() {
+        let (browser, opened) = fake_browser("exact");
+        let scope = Scope::parse([
+            "https://auth.example.com",
+            "http://127.0.0.1:8080",
+            "https://*.cdn.example.com",
+        ])
+        .unwrap();
+        let mut opener = Opener::start(&browser, &scope).unwrap();
+        let tried = [
+            ("https://auth.example.com/authorize?x=1", true),
+            ("https://auth.example.com", true),
+            ("https://auth.example.com:443?y", true),
+            ("http://127.0.0.1:8080/#z", true),
+            ("https://auth.example.com.evil.net/", false),
+            ("https://auth.example.com@evil.net/", false),
+            ("https://evil.net/?https://auth.example.com/", false),
+            ("http://auth.example.com/", false),
+            ("http://127.0.0.1/", false),
+            ("https://a.cdn.example.com/", false),
+            ("-x https://auth.example.com/", false),
+        ];
+        for (url, _) in tried {
+            opener.open(url);
+        }
+        drop(opener);
+        let expected: Vec<&str> = tried.iter().filter(|t| t.1).map(|t| t.0).collect();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let lines = loop {
+            let text = std::fs::read_to_string(&opened).unwrap_or_default();
+            let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+            if lines.len() >= expected.len() || Instant::now() > deadline {
+                lines.sort();
+                break lines;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let mut expected: Vec<String> = expected.into_iter().map(str::to_string).collect();
+        expected.sort();
+        assert_eq!(lines, expected);
+    }
+
+    #[test]
+    fn no_helper_without_an_exact_origin() {
+        let scope = Scope::parse(["https://*.example.com"]).unwrap();
+        assert!(Opener::start("true", &scope).is_none());
+        assert!(Opener::start("true", &Scope::default()).is_none());
+    }
 
     #[test]
     fn parses_an_ssdp_answer_for_our_target() {

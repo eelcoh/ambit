@@ -87,3 +87,70 @@ fn times_out_without_a_redirect() {
         .unwrap_err();
     assert_eq!(e.kind, AuthErrorKind::Timeout);
 }
+
+/// Under the lock, the browser still opens: its helper was started before. The locked program
+/// itself can't start anything.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_browser_opens_from_a_locked_program() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::Command;
+    const CASE: &str = "AMBIT_AUTHORIZE_LOCKED";
+    if let Some(dir) = std::env::var_os(CASE) {
+        // The child: lock, ask for the page, and try to start a program directly.
+        let dir = std::path::PathBuf::from(dir);
+        let auth =
+            NativeAuthorize::new(Scope::parse(["https://auth.invalid"]).unwrap(), free_port())
+                .opening_with(dir.join("browser"));
+        ambit_lockdown::Lockdown::new()
+            .allow(&auth)
+            .apply()
+            .unwrap();
+        let e = auth
+            .authorize("https://auth.invalid/authorize", Duration::from_millis(300))
+            .unwrap_err();
+        assert_eq!(e.kind, AuthErrorKind::Timeout);
+        assert!(
+            Command::new("/bin/true").status().is_err(),
+            "started a program"
+        );
+        println!("> done");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("ambit-authorize-locked-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let opened = dir.join("opened");
+    let browser = dir.join("browser");
+    std::fs::write(
+        &browser,
+        format!("#!/bin/sh\necho \"$1\" >> '{}'\n", opened.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&browser, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "the_browser_opens_from_a_locked_program",
+            "--nocapture",
+        ])
+        .env(CASE, &dir)
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && out.contains("> done"),
+        "{out}\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for _ in 0..200 {
+        if std::fs::read_to_string(&opened).is_ok_and(|t| !t.is_empty()) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        std::fs::read_to_string(&opened).unwrap(),
+        "https://auth.invalid/authorize\n"
+    );
+}

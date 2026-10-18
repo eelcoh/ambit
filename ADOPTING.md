@@ -133,7 +133,7 @@ In this order; each step leaves something that builds.
 
    Two things to expect when copying ambit's `cackle.toml` (found moving sonos-tui to 81cad7b):
    - **One run-time grant is missing.** No binary in ambit wires `NativeAuthorize`, so ambit's
-     file grants `process` (the browser it opens) to `ambit-caps-net-native` only in tests; a
+     file grants `process` (its browser helper) to `ambit-caps-net-native` only in tests; a
      project whose wiring uses it adds that. The others are in ambit's file now that its
      examples use them: `fs` for `ambit-caps-dir-native`, `cap-std` and `cap-primitives`
      (`keep`), `net` and `env` for `ureq` (`up`; `env` is its proxy-from-environment code,
@@ -206,8 +206,9 @@ enforces (Landlock for files and TCP ports, seccomp for system calls). `run-keep
   `.make(path)`, which creates it first (keep's `--into`). A mount that appears later (a Kobo
   plugged in after start) isn't covered: grant the folder it appears in, or lock after it's
   there.
-- Programs it starts inherit the lock, so a browser for `Authorize` won't work locked: use
-  `without_browser()`.
+- A locked program can't start programs. `NativeAuthorize` opens the browser through a helper it
+  starts when it's made, which stays outside the lock and opens only addresses at the scope's
+  exact origins (checked again by the helper). So make it before the lock.
 - `apply` says how far it got (`Locked::warning()` for a line to print): fully, partly on an
   older kernel, or not at all off Linux. It fails, and the wiring should stop, only when a
   grant can't be applied.

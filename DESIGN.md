@@ -308,7 +308,9 @@ let discovery = NativeDiscovery::new(Targets::new(["urn:schemas-upnp-org:device:
   (with `state`, PKCE) and checks what comes back; the capability opens the URL only if it's in
   its scope (`https://accounts.spotify.com`), so an app can't use the browser to reach anywhere
   else, and listens on `127.0.0.1:<port>` only while waiting. Native: `xdg-open`/`open` with all
-  output discarded (the terminal is the app's), or `.without_browser()`.
+  output discarded (the terminal is the app's), or `.without_browser()`. The opener is a helper
+  started with the capability, before the lock: it stays outside it, opens only addresses at the
+  scope's exact origins and checks each one itself, so a locked program never starts programs.
 - Open for `sonos-tui`: the music-service endpoints (SMAPI) come from Sonos at run time, so
   they can't be listed in advance. Options: a subdomain scope per known service, or a scope
   that grows only with origins the speaker reported (needs a design).

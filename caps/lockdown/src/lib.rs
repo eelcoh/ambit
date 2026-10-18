@@ -12,7 +12,7 @@
 //!   else on the disk is refused, reading included.
 //! - **TCP** (Landlock): connecting and listening only on the ports granted.
 //! - **Signals and abstract sockets** (Landlock scopes): only within the program.
-//! - **System calls** (seccomp): never starting programs (unless granted), debugging other
+//! - **System calls** (seccomp): never starting programs, debugging other
 //!   processes, loading kernel code or mounting; with no network grant, no internet sockets at
 //!   all, UDP included.
 //!
@@ -42,9 +42,6 @@ pub enum Grant {
     Udp,
     /// Use a terminal device opened by name (`/dev/tty`).
     Terminal,
-    /// Start other programs. They run under the same lock, so a browser started this way can't
-    /// reach its own files: under a lock, sign in without one (`NativeAuthorize::without_browser`).
-    StartPrograms,
 }
 
 /// What a capability reaches. Implemented by the native capabilities; the wiring passes them to
@@ -229,7 +226,7 @@ mod imp {
         let err = |what: &str, e: &dyn fmt::Display| LockError(format!("{what}: {e}"));
         let mut fs: Vec<(PathBuf, BitFlags<AccessFs>)> = Vec::new();
         let mut net: Vec<(u16, AccessNet)> = Vec::new();
-        let (mut inet, mut programs) = (false, false);
+        let mut inet = false;
         for grant in grants {
             match grant {
                 Grant::Read(path) => fs.push((path.clone(), read())),
@@ -259,7 +256,6 @@ mod imp {
                     "/dev/tty".into(),
                     make_bitflags!(AccessFs::{ReadFile | WriteFile | IoctlDev}),
                 )),
-                Grant::StartPrograms => programs = true,
             }
         }
 
@@ -291,7 +287,7 @@ mod imp {
         }
         let status = ruleset.restrict_self().map_err(|e| err("Landlock", &e))?;
 
-        syscalls(inet, programs)?;
+        syscalls(inet)?;
 
         Ok(match status.ruleset {
             RulesetStatus::FullyEnforced => Locked::Fully,
@@ -309,6 +305,8 @@ mod imp {
 
     /// The system calls no program here needs, refused with "operation not permitted".
     const NEVER: &[i64] = &[
+        libc::SYS_execve,
+        libc::SYS_execveat,
         libc::SYS_ptrace,
         libc::SYS_process_vm_readv,
         libc::SYS_process_vm_writev,
@@ -340,14 +338,10 @@ mod imp {
         libc::SYS_fanotify_init,
     ];
 
-    fn syscalls(inet: bool, programs: bool) -> Result<(), LockError> {
+    fn syscalls(inet: bool) -> Result<(), LockError> {
         let err = |e: &dyn fmt::Display| LockError(format!("seccomp: {e}"));
         let mut rules: BTreeMap<i64, Vec<SeccompRule>> =
             NEVER.iter().map(|call| (*call, Vec::new())).collect();
-        if !programs {
-            rules.insert(libc::SYS_execve, Vec::new());
-            rules.insert(libc::SYS_execveat, Vec::new());
-        }
         if !inet {
             let family = |family: i32| {
                 SeccompCondition::new(0, SeccompCmpArgLen::Dword, SeccompCmpOp::Eq, family as u64)

@@ -326,7 +326,11 @@ allow_unsafe = true
 allow_apis = [
     "net",
 ]
+# process: the browser helper. env and fs: the locked-program test (a fake browser script in a
+# temp folder; the test binary started again as the locked child).
 test.allow_apis = [
+    "env",
+    "fs",
     "process",
 ]
 
