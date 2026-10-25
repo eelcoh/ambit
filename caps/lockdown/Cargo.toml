@@ -11,4 +11,13 @@ ambit-caps-dir.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock.workspace = true
 libc.workspace = true
+rustix = { workspace = true, features = ["process"], optional = true }
 seccompiler.workspace = true
+
+[features]
+# Restarting a locked program (`restartable`, `restart`). Off unless a program needs it: it brings
+# in rustix for the signal.
+restart = ["dep:rustix"]
+
+[dev-dependencies]
+ambit-lockdown = { path = ".", features = ["restart"] }

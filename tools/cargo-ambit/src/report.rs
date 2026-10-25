@@ -83,6 +83,39 @@ struct Program {
     target: String,
 }
 
+/// The crates (name, version) cargo builds for this program alone, as `cargo build -p` would:
+/// features only from what the program uses, not from the rest of the workspace or its tests.
+fn built_for(program: &Program) -> Result<BTreeSet<(String, String)>, String> {
+    let output = std::process::Command::new("cargo")
+        .args(["tree", "--locked", "-e", "normal,build", "--prefix", "none"])
+        .args([
+            "-f",
+            "{p}",
+            "--target",
+            &program.target,
+            "-p",
+            &program.package,
+        ])
+        .output()
+        .map_err(|e| format!("cargo tree: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo tree -p {} failed:\n{}",
+            program.package,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut words = line.split_whitespace();
+            let name = words.next()?;
+            let version = words.next()?.strip_prefix('v')?;
+            Some((name.to_string(), version.to_string()))
+        })
+        .collect())
+}
+
 fn programs(meta: &Metadata) -> Vec<Program> {
     let root = meta.workspace_root();
     let excluded = [root.join("apps"), root.join("tools")];
@@ -193,6 +226,19 @@ fn write_program(
         }
         todo.extend(edges(&id, &|kind| kind.is_none() || kind == Some("build")));
     }
+
+    // The graph above has every feature any workspace member turns on, tests' included. What
+    // this program's build actually uses is narrower: keep only the crates cargo builds for it.
+    let built = built_for(program)?;
+    let in_build = |id: &String| {
+        let p = packages[id.as_str()];
+        built.contains(&(
+            p["name"].as_str().unwrap_or("").to_string(),
+            p["version"].as_str().unwrap_or("").to_string(),
+        ))
+    };
+    ships.retain(&in_build);
+    build.retain(&in_build);
 
     let bins = program.bins.join("`, `");
     if program.bins == [program.package.clone()] {

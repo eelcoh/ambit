@@ -54,7 +54,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 
 ## `keep` (run-keep, for x86_64-unknown-linux-gnu)
 
-36 crates ship: 9 from this workspace, 27 from outside it with 745,915 lines of Rust. 7 more run at build time.
+35 crates ship: 9 from this workspace, 26 from outside it with 745,504 lines of Rust. 7 more run at build time.
 
 | ships | version | from | lines | may use | build script may use |
 |---|---|---|--:|---|---|
@@ -65,7 +65,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | ambit-caps-std | 0.1.0 | workspace | - |  | - |
 | ambit-cli | 0.1.0 | workspace | - |  | - |
 | ambit-cli-native | 0.1.0 | workspace | - | env, terminate | - |
-| ambit-lockdown | 0.1.0 | workspace | - | fs | - |
+| ambit-lockdown | 0.1.0 | workspace | - | env, fs, process, terminate | - |
 | keep | 0.1.0 | workspace | - |  | - |
 | ambient-authority | 0.0.2 | crates.io | 59 |  | - |
 | anstyle | 1.0.14 | crates.io | 1,472 | unsafe | - |
@@ -77,7 +77,6 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | clap_builder | 4.6.7 | crates.io | 26,792 |  | - |
 | clap_lex | 1.1.1 | crates.io | 743 | unsafe | - |
 | enumflags2 | 0.7.12 | crates.io | 1,464 | unsafe | - |
-| errno | 0.3.14 | crates.io | 411 | unsafe | - |
 | fs-set-times | 0.20.3 | crates.io | 296 | unsafe | - |
 | getrandom | 0.3.4 | crates.io | 2,261 | unsafe | env, process |
 | io-extras | 0.19.0 | crates.io | 3,576 | unsafe | env, process |
@@ -116,7 +115,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | ambit-caps-kv-native | 0.1.0 | workspace | - | fs | - |
 | ambit-caps-native | 0.1.0 | workspace | - |  | - |
 | ambit-caps-std | 0.1.0 | workspace | - |  | - |
-| ambit-lockdown | 0.1.0 | workspace | - | fs | - |
+| ambit-lockdown | 0.1.0 | workspace | - | env, fs, process, terminate | - |
 | ambit-server | 0.1.0 | workspace | - |  | - |
 | ambit-server-native | 0.1.0 | workspace | - |  | - |
 | ambit-server-std | 0.1.0 | workspace | - | net | - |
@@ -168,7 +167,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | ambit-caps-kv-native | 0.1.0 | workspace | - | fs | - |
 | ambit-caps-native | 0.1.0 | workspace | - |  | - |
 | ambit-caps-std | 0.1.0 | workspace | - |  | - |
-| ambit-lockdown | 0.1.0 | workspace | - | fs | - |
+| ambit-lockdown | 0.1.0 | workspace | - | env, fs, process, terminate | - |
 | ambit-tui | 0.1.0 | workspace | - |  | - |
 | ambit-tui-native | 0.1.0 | workspace | - | fs | - |
 | todo | 0.1.0 | workspace | - |  | - |
@@ -255,7 +254,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 
 ## `up` (run-up, for x86_64-unknown-linux-gnu)
 
-46 crates ship: 10 from this workspace, 36 from outside it with 868,963 lines of Rust. 10 more run at build time.
+45 crates ship: 10 from this workspace, 35 from outside it with 868,552 lines of Rust. 10 more run at build time.
 
 | ships | version | from | lines | may use | build script may use |
 |---|---|---|--:|---|---|
@@ -267,7 +266,7 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | ambit-caps-std | 0.1.0 | workspace | - |  | - |
 | ambit-cli | 0.1.0 | workspace | - |  | - |
 | ambit-cli-native | 0.1.0 | workspace | - | env, terminate | - |
-| ambit-lockdown | 0.1.0 | workspace | - | fs | - |
+| ambit-lockdown | 0.1.0 | workspace | - | env, fs, process, terminate | - |
 | up | 0.1.0 | workspace | - |  | - |
 | anstyle | 1.0.14 | crates.io | 1,472 | unsafe | - |
 | base64 | 0.23.1 | crates.io | 7,747 |  | - |
@@ -278,7 +277,6 @@ Hermit kernel features (each adds kernel code to the image): acpi, dhcpv4, pci, 
 | clap_builder | 4.6.7 | crates.io | 26,792 |  | - |
 | clap_lex | 1.1.1 | crates.io | 743 | unsafe | - |
 | enumflags2 | 0.7.12 | crates.io | 1,464 | unsafe | - |
-| errno | 0.3.14 | crates.io | 411 | unsafe | - |
 | getrandom | 0.2.17 | crates.io | 1,614 | unsafe | - |
 | getrandom | 0.3.4 | crates.io | 2,261 | unsafe | env, process |
 | http | 1.5.0 | crates.io | 13,051 | unsafe | - |

@@ -209,6 +209,16 @@ enforces (Landlock for files and TCP ports, seccomp for system calls). `run-keep
 - A locked program can't start programs. `NativeAuthorize` opens the browser through a helper it
   starts when it's made, which stays outside the lock and opens only addresses at the scope's
   exact origins (checked again by the helper). So make it before the lock.
+- A lock can't be widened. When the program needs more later (saved settings naming other
+  folders), it starts again (`ambit-lockdown` with `features = ["restart"]`):
+  `ambit_lockdown::restartable()` as the first line of `main`, then
+  `ambit_lockdown::restart()` (after the terminal is restored) when it's time. The program runs
+  under a small supervisor outside the lock that only waits and starts it again, with the same
+  arguments; the wiring then opens and locks afresh from them and what was saved. Same arguments
+  on purpose: a program that could choose its next arguments could grant itself anything. So a
+  setting the user also gave on the command line keeps the command line's value after a restart.
+  `can_restart()` is false off Linux and without `restartable()`: restart in-process there, as
+  nothing is locked.
 - `apply` says how far it got (`Locked::warning()` for a line to print): fully, partly on an
   older kernel, or not at all off Linux. It fails, and the wiring should stop, only when a
   grant can't be applied.

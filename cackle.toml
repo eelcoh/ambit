@@ -588,8 +588,13 @@ allow_apis = [
 ]
 
 [pkg.ambit-lockdown]
+# env, process, terminate: the restart supervisor (it reads its own program and arguments,
+# starts the program again, signals itself to ask for that, and exits with the program's status).
 allow_apis = [
+    "env",
     "fs",
+    "process",
+    "terminate",
 ]
 # The tests run each case in a child process and try files, sockets and programs from inside.
 test.allow_apis = [
@@ -597,4 +602,5 @@ test.allow_apis = [
     "fs", "path_fs",
     "net",
     "process",
+    "terminate",
 ]

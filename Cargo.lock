@@ -133,8 +133,10 @@ name = "ambit-lockdown"
 version = "0.1.0"
 dependencies = [
  "ambit-caps-dir",
+ "ambit-lockdown",
  "landlock",
  "libc",
+ "rustix",
  "seccompiler",
 ]
 

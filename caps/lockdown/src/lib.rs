@@ -19,6 +19,10 @@
 //! Lock before starting threads: a lock covers the thread that applies it and what it starts
 //! afterwards. Once applied it can't be lifted or widened. On other systems [`Lockdown::apply`]
 //! locks nothing and says so; on an older Linux it locks what that kernel supports.
+//!
+//! A lock can't be widened, so a program that needs more after a change (new settings naming
+//! other folders) starts again (feature `restart`): `restartable` first in `main`, `restart`
+//! when it's time.
 #![forbid(unsafe_code)]
 
 use std::fmt;
@@ -168,9 +172,49 @@ impl fmt::Display for LockError {
 
 impl std::error::Error for LockError {}
 
+/// Lets this program start itself again once locked (feature `restart`), with [`restart`]. Call it first in `main`,
+/// before anything is opened.
+///
+/// On Linux the program then runs as the child of a small supervisor: this process, which stays
+/// outside the lock, waits, and starts the program again (same arguments, same environment)
+/// each time it asks. What a restart can reach is decided afresh by the wiring, from the same
+/// arguments and what the program saved. Elsewhere this does nothing.
+///
+/// Doesn't return in the supervisor: it exits with the program's status.
+#[cfg(feature = "restart")]
+pub fn restartable() {
+    imp::restartable()
+}
+
+/// Whether [`restart`] will work: on Linux, under the supervisor [`restartable`] started.
+#[cfg(feature = "restart")]
+pub fn can_restart() -> bool {
+    imp::can_restart()
+}
+
+/// Ends this program and has it started again, with the same arguments. Restore the terminal
+/// first. Returns only if it can't: not under the supervisor ([`can_restart`]).
+#[cfg(feature = "restart")]
+pub fn restart() -> LockError {
+    imp::restart()
+}
+
 #[cfg(not(target_os = "linux"))]
 mod imp {
     use super::*;
+
+    #[cfg(feature = "restart")]
+    pub fn restartable() {}
+
+    #[cfg(feature = "restart")]
+    pub fn can_restart() -> bool {
+        false
+    }
+
+    #[cfg(feature = "restart")]
+    pub fn restart() -> LockError {
+        LockError("restarting is for locked programs, on Linux".into())
+    }
 
     pub fn apply(_: &[Grant]) -> Result<Locked, LockError> {
         Ok(Locked::Not(
@@ -193,6 +237,72 @@ mod imp {
     };
 
     use super::*;
+
+    /// Set for the program the supervisor starts: the supervisor's process id.
+    #[cfg(feature = "restart")]
+    const SUPERVISOR: &str = "AMBIT_LOCKDOWN_SUPERVISOR";
+
+    /// How the program asks to be started again: it ends itself with this signal, which nothing
+    /// here uses otherwise. (A locked program can signal only itself.)
+    #[cfg(feature = "restart")]
+    const AGAIN: rustix::process::Signal = rustix::process::Signal::USR2;
+
+    #[cfg(feature = "restart")]
+    pub fn restartable() {
+        use std::os::unix::process::ExitStatusExt;
+        if can_restart() {
+            return;
+        }
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        let args: Vec<_> = std::env::args_os().skip(1).collect();
+        let me = rustix::process::getpid().as_raw_nonzero().to_string();
+        let mut first = true;
+        loop {
+            let status = std::process::Command::new(&exe)
+                .args(&args)
+                .env(SUPERVISOR, &me)
+                .status();
+            let status = match status {
+                Ok(status) => status,
+                // Nothing started yet: run here, without restarts.
+                Err(_) if first => return,
+                Err(e) => {
+                    eprintln!("lockdown: can't start {} again: {e}", exe.display());
+                    std::process::exit(1)
+                }
+            };
+            first = false;
+            match (status.code(), status.signal()) {
+                (_, Some(signal)) if signal == AGAIN.as_raw() => continue,
+                (Some(code), _) => std::process::exit(code),
+                (None, signal) => std::process::exit(128 + signal.unwrap_or(0)),
+            }
+        }
+    }
+
+    #[cfg(feature = "restart")]
+    pub fn can_restart() -> bool {
+        let parent = rustix::process::getppid().map(|p| p.as_raw_nonzero().to_string());
+        parent.is_some() && std::env::var(SUPERVISOR).ok() == parent
+    }
+
+    #[cfg(feature = "restart")]
+    pub fn restart() -> LockError {
+        use std::io::Write;
+        if !can_restart() {
+            return LockError("not started to restart: call restartable() first in main".into());
+        }
+        let _ = std::io::stdout().flush();
+        let _ = std::io::stderr().flush();
+        if let Err(e) = rustix::process::kill_process(rustix::process::getpid(), AGAIN) {
+            return LockError(format!("restart: {e}"));
+        }
+        // The signal ends the program; if it's ignored or handled, it's still running.
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        LockError("restart: the signal didn't end the program".into())
+    }
 
     /// The newest Landlock this code knows. Older kernels enforce what they have.
     const ABI_KNOWN: ABI = ABI::V9;

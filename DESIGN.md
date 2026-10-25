@@ -496,6 +496,11 @@ debugger comfort.
   enforced on this machine's kernel (7.2). Limits: UDP isn't port-limited (Landlock has no UDP
   rules), TCP is by port not host (the scope does hosts), a mount that appears after the lock
   isn't covered.
+- **Restarting a locked program: works.** `restartable()` first in `main` makes the process a
+  supervisor that stays outside the lock, waits, and starts the program again (same arguments)
+  when it ends itself with SIGUSR2 (`restart()`); otherwise it exits with the program's status.
+  For crossload's settings, which can name new folders. Tested: a locked child restarts twice,
+  its exit code comes through.
 - **Attack-surface report: works.** `cargo ambit report` writes `attack-surface.md`; `cargo
   ambit check` fails when it's out of date (see "Attack surface").
 - sim `MemKv` fault injection (`Faults::All`, `Faults::Writes`), with spec tests.
