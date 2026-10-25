@@ -209,7 +209,8 @@ mod imp {
         "/etc/ld.so.cache",
     ];
     const RESOLVER_LIBS: &[&str] = &["/usr/lib64", "/usr/lib", "/lib64", "/lib"];
-    const RESOLVER_SOCKETS: &[&str] = &["/run/systemd/resolve", "/run/nscd"];
+    // avahi: `.local` names (nss-mdns, as Fedora and Debian set it up).
+    const RESOLVER_SOCKETS: &[&str] = &["/run/systemd/resolve", "/run/nscd", "/run/avahi-daemon"];
 
     fn read() -> BitFlags<AccessFs> {
         make_bitflags!(AccessFs::{ReadFile | ReadDir})
