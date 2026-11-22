@@ -418,7 +418,7 @@ mod imp {
     #[cfg(target_arch = "aarch64")]
     const SYS_KEXEC_FILE_LOAD: i64 = 294;
     #[cfg(not(target_arch = "aarch64"))]
-    const SYS_KEXEC_FILE_LOAD: i64 = libc::SYS_kexec_file_load as i64;
+    const SYS_KEXEC_FILE_LOAD: i64 = libc::SYS_kexec_file_load;
 
     /// The system calls no program here needs, refused with "operation not permitted".
     const NEVER: &[i64] = &[
