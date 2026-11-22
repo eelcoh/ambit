@@ -414,6 +414,12 @@ mod imp {
         })
     }
 
+    /// `kexec_file_load`; the libc crate lacks it for aarch64 musl, so it is spelled out.
+    #[cfg(target_arch = "aarch64")]
+    const SYS_KEXEC_FILE_LOAD: i64 = 294;
+    #[cfg(not(target_arch = "aarch64"))]
+    const SYS_KEXEC_FILE_LOAD: i64 = libc::SYS_kexec_file_load as i64;
+
     /// The system calls no program here needs, refused with "operation not permitted".
     const NEVER: &[i64] = &[
         libc::SYS_execve,
@@ -430,7 +436,7 @@ mod imp {
         libc::SYS_bpf,
         libc::SYS_perf_event_open,
         libc::SYS_kexec_load,
-        libc::SYS_kexec_file_load,
+        SYS_KEXEC_FILE_LOAD,
         libc::SYS_init_module,
         libc::SYS_finit_module,
         libc::SYS_delete_module,
